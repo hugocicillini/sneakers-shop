@@ -11,7 +11,7 @@ function App() {
   }, []);
 
   const fetchTenis = (query) => {
-    let url = "http://localhost:5000/tenis";
+    let url = "https://sneakers-shop-tm46.onrender.com/tenis";
     if (query !== "todos") {
       url += `?search=${query.toLowerCase()}`;
     }

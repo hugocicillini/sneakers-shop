@@ -22,7 +22,7 @@ mongoose
   .then(() => {
     console.log("Conected to: MongoDB!🍃");
     app.listen(process.env.PORT, () => {
-      console.log(`Server started at: http://localhost:${process.env.PORT} 🚀`);
+      console.log(`Server started at: https://sneakers-shop-tm46.onrender.com 🚀`);
     });
   })
   .catch((error) => {
