@@ -7,6 +7,7 @@ export const getUserFavorites = async () => {
         Authorization: `Bearer ${localStorage.getItem('token')}`,
       },
     });
+
     const data = await response.json();
     return data;
   } catch (error) {
@@ -25,8 +26,8 @@ export const addFavorite = async (sneakerId) => {
       },
       body: JSON.stringify({ sneakerId }),
     });
+
     const data = await response.json();
-    console.log('Resposta do servidor:', data);
     return data;
   } catch (error) {
     console.error('Erro ao adicionar favorito:', error);
@@ -46,6 +47,7 @@ export const removeFavorite = async (sneakerId) => {
         },
       }
     );
+    
     const data = await response.json();
     return { success: true, data };
   } catch (error) {

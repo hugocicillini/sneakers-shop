@@ -48,7 +48,7 @@ const LayoutBase = ({ children, search, setSearch }) => {
 
   return (
     <div>
-      <header className="bg-gray-300 py-4 md:py-6 px-4 shadow">
+      <header className="bg-[#f7f7f7] py-4 md:py-6 px-4 shadow">
         <div className="flex items-center justify-between md:justify-around">
           {/* Botão do Menu Mobile */}
           <button

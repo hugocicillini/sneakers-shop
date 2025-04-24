@@ -1,6 +1,8 @@
 import { Sneakers } from '../models/sneakersModel.js';
 import { SneakersVariant } from '../models/sneakersVariantModel.js';
 
+import '../models/reviewModel.js'; // Apenas registra o modelo no Mongoose
+
 export const getSneakers = async (req, res) => {
   try {
     let filter = { isActive: true }; // Por padrão, retornar apenas produtos ativos
@@ -114,17 +116,48 @@ export const getSneakers = async (req, res) => {
 
 export const getSneakerById = async (req, res) => {
   try {
-    // Usar o populate para carregar variantes e reviews
-    const sneaker = await Sneakers.findById(req.params.id)
+    const { id } = req.params;
+
+
+    const sneaker = await Sneakers.findById(id)
       .populate({
         path: 'variants',
-        select: '-createdAt -updatedAt', // Excluir campos desnecessários
-        match: { isActive: true }, // Apenas variantes ativas
+        select: '-createdAt -updatedAt',
+        match: { isActive: true },
       })
       .populate({
         path: 'reviews',
         select: 'rating comment user date',
-        options: { sort: { date: -1 }, limit: 10 }, // Reviews mais recentes
+        options: { sort: { date: -1 }, limit: 5 },
+      });
+
+    if (!sneaker) {
+      return res.status(404).json({ message: 'Sneaker not found!' });
+    }
+
+    return res.status(200).json(sneaker);
+  } catch (error) {
+    console.error('Erro ao buscar sneaker:', error);
+    res.status(500).json({ message: 'Error fetching sneaker', error });
+  }
+};
+
+// Quando buscar detalhes de um sneaker específico, limitar a 5 reviews iniciais
+export const getSneakerBySlug = async (req, res) => {
+  try {
+    const { slug } = req.params;
+
+    // Usar o populate para carregar variantes e reviews
+    const sneaker = await Sneakers.findOne({ slug: slug }) // Corrigido: passando um objeto de consulta
+      .populate({
+        path: 'variants', // Corrigido de 'variant' para 'variants'
+        select: '-createdAt -updatedAt', // Excluir campos desnecessários
+        match: { isActive: true }, // Apenas variantes ativas
+      })
+      .populate({
+        path: 'reviews', // Corrigido de 'review' para 'reviews'
+        select: 'rating comment user date',
+        options: { sort: { date: -1 }, limit: 5 }, // Limita a 5 reviews iniciais
       });
 
     if (!sneaker) {

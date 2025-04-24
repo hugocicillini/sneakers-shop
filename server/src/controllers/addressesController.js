@@ -83,8 +83,6 @@ export const createAddress = async (req, res) => {
       );
     }
 
-    console.log('Novo endereço:', newAddressData);
-
     const newAddress = new Addresses(newAddressData);
     await newAddress.save();
 
@@ -226,7 +224,6 @@ export const deleteAddress = async (req, res) => {
               { isDefault: true },
               { new: true }
             );
-            console.log('Novo endereço padrão definido:', newDefaultAddress._id);
           }
         }
       }

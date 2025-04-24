@@ -31,7 +31,6 @@ export const FavoritesProvider = ({ children }) => {
 
       // Extraímos a lista de IDs dos sneakers favoritos para ter um formato consistente
       const favoriteSneakers = userFavorites?.sneakers || [];
-      console.log('Favoritos carregados:', favoriteSneakers);
       setFavorites(favoriteSneakers);
     } catch (error) {
       console.error('Erro ao carregar favoritos:', error);

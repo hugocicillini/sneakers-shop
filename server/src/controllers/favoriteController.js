@@ -72,18 +72,14 @@ export const getFavoritesById = async (req, res) => {
 export const removeFavorite = async (req, res) => {
   try {
     const { id } = req.params;
-    console.log('Sneaker ID:', req.params); // Debugging line
 
     const favorite = await Favorite.findOne({ user: req.user.id });
-
-    console.log('Favorite:', favorite); // Debugging line
 
     if (!favorite) {
       return res.status(404).json({ message: 'No favorites found' });
     }
 
     const index = favorite.sneakers.indexOf(id);
-    console.log('Index:', index); // Debugging line
     if (index === -1) {
       return res.status(404).json({ message: 'Sneaker not in favorites' });
     }

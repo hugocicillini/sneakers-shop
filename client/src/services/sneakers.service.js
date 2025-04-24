@@ -78,10 +78,17 @@ export const getSneakers = async (
   return response.json();
 };
 
-export const getSneakerById = async (id) => {
+export const getSneakerBySlug = async (slug) => {
   // Atualização para usar URL base da variável de ambiente e popular variantes/reviews
-  const url = `${import.meta.env.VITE_API_URL}/sneakers/${id}`;
-  const response = await fetch(url);
+  const response = await fetch(
+    `${import.meta.env.VITE_API_URL}/sneakers/${slug}`,
+    {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    }
+  );
 
   if (!response.ok) {
     throw new Error('Failed to fetch sneaker details');

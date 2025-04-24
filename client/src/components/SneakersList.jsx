@@ -35,7 +35,7 @@ const SneakersList = ({ sneakers }) => {
         sneakers.map((item) => (
           <Link
             key={item._id}
-            to={`/product/${item.slug || item._id}`}
+            to={`/sneaker/${item.slug}`}
             className="no-underline text-inherit"
           >
             <Card className="flex flex-col h-full overflow-hidden transition-all duration-300 hover:shadow-lg group relative">

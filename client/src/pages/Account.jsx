@@ -200,8 +200,6 @@ const Account = () => {
         return;
       }
 
-      console.log('Resposta da exclusão:', response);
-
       // Atualizar o estado do usuário removendo o endereço excluído
       const updatedUser = { ...user };
 
@@ -212,11 +210,6 @@ const Account = () => {
 
       // Se um novo endereço padrão foi definido, atualize os estados dos endereços
       if (response.newDefaultAddress) {
-        console.log(
-          'Novo endereço padrão recebido:',
-          response.newDefaultAddress
-        );
-
         // Atualizar o estado isDefault para o novo endereço padrão
         updatedUser.addresses = updatedUser.addresses.map((addr) => ({
           ...addr,

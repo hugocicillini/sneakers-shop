@@ -6,6 +6,7 @@ import Account from './pages/Account'; // Página de conta do usuário
 import Home from './pages/Home';
 import Login from './pages/Login';
 import Register from './pages/Register'; // Se você tiver uma página de registro
+import SneakerDetail from './pages/SneakerDetail';
 
 function App() {
   return (
@@ -28,19 +29,7 @@ function App() {
                 </ProtectedRoute>
               }
             />
-
-            {/* <Route path="/sneaker/:id" element={<SneakerDetail />} /> */}
-            {/* 
-          Exemplo de outra rota protegida:
-          <Route 
-          path="/cart" 
-          element={
-            <ProtectedRoute>
-            <Cart />
-            </ProtectedRoute>
-            } 
-            /> 
-            */}
+            <Route path="/sneaker/:slug" element={<SneakerDetail />} />
           </Routes>
         </BrowserRouter>
       </FavoritesProvider>

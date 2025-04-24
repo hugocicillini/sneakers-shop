@@ -40,7 +40,6 @@ export const AuthProvider = ({ children }) => {
     // Garantir que addresses é sempre um array
     if (!userDataCopy.addresses) {
       userDataCopy.addresses = [];
-      console.log('Inicializando addresses como array vazio');
     }
 
     // Criar o novo estado de usuário
@@ -51,11 +50,8 @@ export const AuthProvider = ({ children }) => {
 
     // Verificar se o estado realmente mudou para evitar atualizações redundantes
     if (user && JSON.stringify(user) === JSON.stringify(newUserData)) {
-      console.log('Estado não mudou, evitando atualização redundante');
       return user; // Retorna o estado atual sem alterar
     }
-
-    console.log('Atualizando estado do usuário:', newUserData);
 
     // Atualizar o estado - usar uma função para garantir o estado mais recente
     setUser(newUserData);
@@ -63,7 +59,6 @@ export const AuthProvider = ({ children }) => {
     // Atualizar localStorage
     if (updateStorage && newUserData) {
       localStorage.setItem('user', JSON.stringify(newUserData));
-      console.log('localStorage atualizado');
     }
 
     return newUserData;

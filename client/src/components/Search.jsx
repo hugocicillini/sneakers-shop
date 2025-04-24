@@ -33,7 +33,7 @@ const Search = ({ search, setSearch }) => {
         onChange={(e) => setInputValue(e.target.value)}
         onKeyDown={handleKeyDown}
         placeholder="Pesquisar..."
-        className="pr-10 bg-white opacity-80"
+        className="pr-10 bg-white"
       />
 
       {inputValue ? (
