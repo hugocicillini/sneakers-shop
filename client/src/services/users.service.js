@@ -1,7 +1,7 @@
 export const loginUser = async (email, password) => {
   try {
     const response = await fetch(
-      `${import.meta.env.VITE_API_URL}/users/login`,
+      `${import.meta.env.VITE_API_URL}/api/users/login`,
       {
         method: 'POST',
         headers: {
@@ -33,13 +33,18 @@ export const loginUser = async (email, password) => {
 export const registerUser = async (name, email, password) => {
   try {
     const response = await fetch(
-      `${import.meta.env.VITE_API_URL}/users/register`,
+      `${import.meta.env.VITE_API_URL}/api/users/register`,
       {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ name, email, password }),
+        body: JSON.stringify({ 
+          name, 
+          email, 
+          password,
+          // Não enviar userType aqui - isso será tratado pelo backend
+        }),
       }
     );
 
@@ -62,10 +67,28 @@ export const registerUser = async (name, email, password) => {
   }
 };
 
+export const getUserById = async (userId) => {
+  try {
+    const response = await fetch(
+      `${import.meta.env.VITE_API_URL}/api/users/${userId}`
+    );
+
+    if (!response.ok) {
+      throw new Error('Erro ao buscar usuário');
+    }
+
+    const data = await response.json();
+    return { success: true, user: data };
+  } catch (error) {
+    console.error('Erro ao buscar usuário:', error);
+    return { success: false, message: error.message };
+  }
+};
+
 export const updateUser = async (userId, userData) => {
   try {
     const response = await fetch(
-      `${import.meta.env.VITE_API_URL}/users/${userId}`,
+      `${import.meta.env.VITE_API_URL}/api/users/${userId}`,
       {
         method: 'PUT',
         headers: {

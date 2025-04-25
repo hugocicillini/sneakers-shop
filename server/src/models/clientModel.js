@@ -2,43 +2,43 @@ import mongoose from 'mongoose';
 import { User } from './userModel.js';
 
 // Schema específico para clientes
-const ClientSchema = User.discriminator(
-  'Client',
-  new mongoose.Schema({
-    defaultAddress: {
+const ClientSchema = new mongoose.Schema({
+  defaultAddress: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Address',
+  },
+  wishlist: [
+    {
       type: mongoose.Schema.Types.ObjectId,
-      ref: 'Address',
+      ref: 'Sneaker',
     },
-    wishlist: [
+  ],
+  preferences: {
+    favoriteCategories: [
       {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: 'Sneaker',
+        type: String,
       },
     ],
-    preferences: {
-      favoriteCategories: [
-        {
-          type: String,
-        },
-      ],
-      favoriteColors: [
-        {
-          type: String,
-        },
-      ],
-      newsletterSubscribed: {
-        type: Boolean,
-        default: false,
+    favoriteColors: [
+      {
+        type: String,
       },
-      shoeSize: {
-        type: Number,
-      },
+    ],
+    newsletterSubscribed: {
+      type: Boolean,
+      default: false,
     },
-    loyaltyPoints: {
+    shoeSize: {
       type: Number,
-      default: 0,
     },
-  })
-);
+  },
+  loyaltyPoints: {
+    type: Number,
+    default: 0,
+  },
+});
 
-export const Client = ClientSchema;
+// Criar o discriminador Client com base no modelo User
+const Client = User.discriminator('Client', ClientSchema);
+
+export { Client };

@@ -203,7 +203,6 @@ const SneakerDetail = () => {
     if (isAuthenticated) {
       // Aqui poderia ser adicionada lógica para sincronizar com o carrinho do usuário no servidor
       // Por exemplo, chamar uma API para salvar o carrinho no perfil do usuário
-      console.log('Usuário autenticado, sincronizando carrinho com o backend...');
     }
   };
   

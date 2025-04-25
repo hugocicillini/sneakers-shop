@@ -6,7 +6,6 @@ import mongoose from 'mongoose';
 // Adicionar item ao carrinho
 export const addToCart = async (req, res) => {
   try {
-    console.log('Corpo da requisição recebido:', JSON.stringify(req.body, null, 2));
     
     // Melhorar o acesso aos dados do corpo da requisição
     const body = req.body;
@@ -16,12 +15,9 @@ export const addToCart = async (req, res) => {
     const color = body.color;
     const size = body.size;
     const cartItemId = body.cartItemId || `${sneakerId}-${size}-${color}-${Date.now()}`;
-    
-    console.log('Dados extraídos:', { sneakerId, variantId, quantity, color, size, cartItemId });
 
     // Validação mais detalhada para depuração
     if (!sneakerId) {
-      console.log('sneakerId não encontrado no corpo da requisição');
       return res.status(400).json({
         success: false, 
         message: 'sneakerId é obrigatório',
@@ -30,7 +26,6 @@ export const addToCart = async (req, res) => {
     }
 
     if (!variantId) {
-      console.log('variantId não encontrado no corpo da requisição');
       return res.status(400).json({
         success: false, 
         message: 'variantId é obrigatório',

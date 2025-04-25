@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { useSearchParams } from 'react-router-dom';
 import { Button } from './ui/button';
 import { Checkbox } from './ui/checkbox';
 import { Label } from './ui/label';
@@ -20,40 +21,144 @@ const Filter = ({
 }) => {
   // Estado interno para quando não é fornecido controle externo
   const [internalIsOpen, setInternalIsOpen] = useState(false);
+  const [searchParams, setSearchParams] = useSearchParams();
 
   // Usar o estado fornecido por props ou o interno
   const openState = setIsOpen ? isOpen : internalIsOpen;
   const setOpenState = setIsOpen || setInternalIsOpen;
 
-  const [filters, setFilters] = useState({
-    brands: [],
-    sizes: [],
-    colors: [],
-    price: { min: '', max: '' },
-    gender: [], // Novo: filtro de gênero
-    tags: [], // Novo: filtro de tags
-    sortBy: 'relevance', // Define o valor padrão ao iniciar o componente
+  const MIN_PRICE = 0;
+  const MAX_PRICE = 1000;
+
+  // Inicializar filtros a partir dos parâmetros da URL
+  const [filters, setFilters] = useState(() => {
+    const urlFilters = {
+      // Ajustado para corresponder aos nomes de parâmetros no backend
+      brands: searchParams.get('brand')?.split(',').filter(Boolean) || [],
+      sizes:
+        searchParams.get('sizes')?.split(',').map(Number).filter(Boolean) || [],
+      colors: searchParams.get('colors')?.split(',').filter(Boolean) || [],
+      gender: searchParams.get('gender')?.split(',').filter(Boolean) || [],
+      category: searchParams.get('category')?.split(',').filter(Boolean) || [],
+      price: {
+        min: searchParams.get('minPrice') || '',
+        max: searchParams.get('maxPrice') || '',
+      },
+      sortBy: searchParams.get('sortBy') || 'relevance',
+    };
+    return urlFilters;
   });
-  const [priceRange, setPriceRange] = useState([0, 1000]);
-  const [expandedSections, setExpandedSections] = useState({
-    brands: false,
-    sizes: false,
-    colors: false,
-    price: false,
-    gender: false, // Novo: estado para seção de gênero
-    tags: false, // Novo: estado para seção de tags
+
+  // Inicializar o price range baseado nos parâmetros de URL
+  const [priceRange, setPriceRange] = useState([
+    filters.price.min ? Number(filters.price.min) : MIN_PRICE,
+    filters.price.max ? Number(filters.price.max) : MAX_PRICE,
+  ]);
+
+  // Inicializar expandedSections com base nas seleções existentes
+  const [expandedSections, setExpandedSections] = useState(() => {
+    // Verificar quais seções têm filtros ativos
+    const sectionsToExpand = {
+      brands: false,
+      sizes: false,
+      colors: false,
+      price: false,
+      gender: false,
+      category: false,
+    };
+
+    const urlFilters = {
+      brands: searchParams.get('brand')?.split(',').filter(Boolean) || [],
+      sizes:
+        searchParams.get('sizes')?.split(',').map(Number).filter(Boolean) || [],
+      colors: searchParams.get('colors')?.split(',').filter(Boolean) || [],
+      gender: searchParams.get('gender')?.split(',').filter(Boolean) || [],
+      category: searchParams.get('category')?.split(',').filter(Boolean) || [],
+      price: {
+        min: searchParams.get('minPrice') || '',
+        max: searchParams.get('maxPrice') || '',
+      },
+    };
+
+    // Expandir seções com filtros ativos
+    if (urlFilters.brands.length > 0) sectionsToExpand.brands = true;
+    if (urlFilters.sizes.length > 0) sectionsToExpand.sizes = true;
+    if (urlFilters.colors.length > 0) sectionsToExpand.colors = true;
+    if (urlFilters.gender.length > 0) sectionsToExpand.gender = true;
+    if (urlFilters.category.length > 0) sectionsToExpand.category = true;
+    if (urlFilters.price.min || urlFilters.price.max)
+      sectionsToExpand.price = true;
+
+    return sectionsToExpand;
   });
 
   // Element para portal
   const [portalElement, setPortalElement] = useState(null);
 
   useEffect(() => {
-    // Configurar o elemento para o portal apenas uma vez
     setPortalElement(document.body);
   }, []);
 
-  const MIN_PRICE = 0;
-  const MAX_PRICE = 1000;
+  // Atualizar a URL quando os filtros mudarem
+  const updateUrlParams = (newFilters) => {
+    const params = new URLSearchParams(searchParams);
+
+    // Remover parâmetros vazios e usar os nomes corretos para o backend
+    if (newFilters.brands.length === 0) {
+      params.delete('brand');
+    } else {
+      params.set('brand', newFilters.brands.join(','));
+    }
+
+    if (newFilters.sizes.length === 0) {
+      params.delete('sizes');
+    } else {
+      params.set('sizes', newFilters.sizes.join(','));
+    }
+
+    if (newFilters.colors.length === 0) {
+      params.delete('colors');
+    } else {
+      params.set('colors', newFilters.colors.join(','));
+    }
+
+    if (newFilters.gender.length === 0) {
+      params.delete('gender');
+    } else {
+      params.set('gender', newFilters.gender.join(','));
+    }
+
+    if (newFilters.category.length === 0) {
+      params.delete('category');
+    } else {
+      params.set('category', newFilters.category.join(','));
+    }
+
+    if (newFilters.price.min) {
+      params.set('minPrice', newFilters.price.min);
+    } else {
+      params.delete('minPrice');
+    }
+
+    if (newFilters.price.max) {
+      params.set('maxPrice', newFilters.price.max);
+    } else {
+      params.delete('maxPrice');
+    }
+
+    if (newFilters.sortBy && newFilters.sortBy !== 'relevance') {
+      params.set('sortBy', newFilters.sortBy);
+    } else {
+      params.delete('sortBy');
+    }
+
+    setSearchParams(params);
+
+    // Notificar o componente pai sobre a mudança
+    if (onFilterChange) {
+      onFilterChange(newFilters);
+    }
+  };
 
   const brands = [
     'Nike',
@@ -109,6 +214,7 @@ const Filter = ({
         ? prev.brands.filter((b) => b !== brand)
         : [...prev.brands, brand];
       return { ...prev, brands: newBrands };
+      // Remoção da atualização imediata dos parâmetros da URL
     });
   };
 
@@ -119,6 +225,7 @@ const Filter = ({
         ? prev.sizes.filter((s) => s !== size)
         : [...prev.sizes, size];
       return { ...prev, sizes: newSizes };
+      // Remoção da atualização imediata dos parâmetros da URL
     });
   };
 
@@ -129,22 +236,25 @@ const Filter = ({
         ? prev.colors.filter((c) => c !== color)
         : [...prev.colors, color];
       return { ...prev, colors: newColors };
+      // Remoção da atualização imediata dos parâmetros da URL
     });
   };
 
   const handlePriceSliderChange = (value) => {
     expandSection('price');
     setPriceRange(value);
-    setFilters((prev) => ({
-      ...prev,
-      price: {
-        min: value[0] === MIN_PRICE ? '' : value[0].toString(),
-        max: value[1] === MAX_PRICE ? '' : value[1].toString(),
-      },
-    }));
+    setFilters((prev) => {
+      return {
+        ...prev,
+        price: {
+          min: value[0] === MIN_PRICE ? '' : value[0].toString(),
+          max: value[1] === MAX_PRICE ? '' : value[1].toString(),
+        },
+      };
+      // Remoção da atualização imediata dos parâmetros da URL
+    });
   };
 
-  // Handlers para novos filtros
   const handleGenderChange = (gender) => {
     expandSection('gender');
     setFilters((prev) => {
@@ -152,21 +262,33 @@ const Filter = ({
         ? prev.gender.filter((g) => g !== gender)
         : [...prev.gender, gender];
       return { ...prev, gender: newGenders };
+      // Remoção da atualização imediata dos parâmetros da URL
     });
   };
 
   const handleTagChange = (tag) => {
-    expandSection('tags');
+    expandSection('category');
     setFilters((prev) => {
-      const newTags = prev.tags.includes(tag)
-        ? prev.tags.filter((t) => t !== tag)
-        : [...prev.tags, tag];
-      return { ...prev, tags: newTags };
+      const newTags = prev.category.includes(tag)
+        ? prev.category.filter((t) => t !== tag)
+        : [...prev.category, tag];
+      return { ...prev, category: newTags };
+      // Remoção da atualização imediata dos parâmetros da URL
     });
   };
 
   const applyAllFilters = () => {
-    onFilterChange && onFilterChange(filters);
+    // Obter o sortBy atual da URL para preservá-lo
+    const currentSortBy = searchParams.get('sortBy') || 'relevance';
+
+    // Aplicar filtros preservando a ordenação atual
+    const filtersToApply = {
+      ...filters,
+      sortBy: currentSortBy,
+    };
+
+    // Agora atualizamos a URL e notificamos o componente pai
+    updateUrlParams(filtersToApply);
     setOpenState(false);
   };
 
@@ -176,13 +298,13 @@ const Filter = ({
       sizes: [],
       colors: [],
       price: { min: '', max: '' },
-      gender: [], // Limpar filtros de gênero
-      tags: [], // Limpar filtros de tags
-      sortBy: 'relevance', // Adicionar isso para garantir que a ordenação volte para o padrão
+      gender: [],
+      category: [],
+      sortBy: searchParams.get('sortBy') || 'relevance', // Manter a ordenação atual
     };
     setFilters(resetFilters);
     setPriceRange([MIN_PRICE, MAX_PRICE]);
-    onFilterChange && onFilterChange(resetFilters);
+    updateUrlParams(resetFilters); // Aplicar os filtros resetados imediatamente
   };
 
   const FilterSection = ({ title, children, section }) => {
@@ -224,7 +346,7 @@ const Filter = ({
             filters.sizes.length > 0 ||
             filters.colors.length > 0 ||
             filters.gender.length > 0 || // Atualizado para incluir novos filtros
-            filters.tags.length > 0 || // Atualizado para incluir novos filtros
+            filters.category.length > 0 || // Atualizado para incluir novos filtros
             filters.price.min ||
             filters.price.max) && (
             <span className="ml-1 bg-primary text-primary-foreground rounded-full w-5 h-5 flex items-center justify-center text-xs">
@@ -232,7 +354,7 @@ const Filter = ({
                 filters.sizes.length +
                 filters.colors.length +
                 filters.gender.length + // Atualizado para incluir novos filtros
-                filters.tags.length + // Atualizado para incluir novos filtros
+                filters.category.length + // Atualizado para incluir novos filtros
                 (filters.price.min || filters.price.max ? 1 : 0)}
             </span>
           )}
@@ -280,13 +402,13 @@ const Filter = ({
                     </FilterSection>
 
                     {/* Nova seção de Tags */}
-                    <FilterSection title="Categorias" section="tags">
+                    <FilterSection title="Categorias" section="category">
                       <div className="flex flex-wrap gap-2">
                         {tagOptions.map((tag) => (
                           <Button
                             key={tag.value}
                             variant={
-                              filters.tags.includes(tag.value)
+                              filters.category.includes(tag.value)
                                 ? 'default'
                                 : 'outline'
                             }
@@ -393,7 +515,7 @@ const Filter = ({
                       filters.sizes.length > 0 ||
                       filters.colors.length > 0 ||
                       filters.gender.length > 0 || // Atualizado para incluir novos filtros
-                      filters.tags.length > 0 || // Atualizado para incluir novos filtros
+                      filters.category.length > 0 || // Atualizado para incluir novos filtros
                       filters.price.min ||
                       filters.price.max) && (
                       <Button
@@ -439,13 +561,13 @@ const Filter = ({
           </FilterSection>
 
           {/* Nova seção de Tags */}
-          <FilterSection title="Categorias" section="tags">
+          <FilterSection title="Categorias" section="category">
             <div className="flex flex-wrap gap-2">
               {tagOptions.map((tag) => (
                 <Button
                   key={tag.value}
                   variant={
-                    filters.tags.includes(tag.value) ? 'default' : 'outline'
+                    filters.category.includes(tag.value) ? 'default' : 'outline'
                   }
                   size="sm"
                   className="mb-2"
@@ -542,7 +664,7 @@ const Filter = ({
             filters.sizes.length > 0 ||
             filters.colors.length > 0 ||
             filters.gender.length > 0 || // Atualizado para incluir novos filtros
-            filters.tags.length > 0 || // Atualizado para incluir novos filtros
+            filters.category.length > 0 || // Atualizado para incluir novos filtros
             filters.price.min ||
             filters.price.max) && (
             <Button

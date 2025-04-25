@@ -1,82 +1,127 @@
+let pendingRequests = {};
+
 export const getSneakers = async (
   currentPage,
   sneakersPerPage,
   search,
   filters = {}
 ) => {
-  let url = `${import.meta.env.VITE_API_URL}/api/sneakers`;
+  // Usar URLSearchParams para construir os parâmetros de consulta
+  const params = new URLSearchParams();
 
-  const params = [];
-
+  // Adicionar parâmetros básicos
   if (search) {
-    params.push(`search=${encodeURIComponent(search.toLowerCase())}`);
+    params.set('search', search.toLowerCase());
   }
 
   if (currentPage) {
-    params.push(`page=${currentPage}`);
-  }
-  if (sneakersPerPage) {
-    params.push(`limit=${sneakersPerPage}`);
+    params.set('page', currentPage.toString());
   }
 
-  if (filters.brand || (filters.brands && filters.brands.length > 0)) {
-    const brand =
-      filters.brand || (filters.brands.length === 1 ? filters.brands[0] : null);
-    if (brand) {
-      params.push(`brand=${encodeURIComponent(brand)}`);
-    }
+  if (sneakersPerPage) {
+    params.set('limit', sneakersPerPage.toString());
+  }
+
+  // Adicionar parâmetros de filtro - corrigidos para corresponder ao backend
+  if (filters.brands && filters.brands.length > 0) {
+    // O backend espera 'brand' no singular
+    params.set('brand', filters.brands.join(','));
   }
 
   if (filters.sizes && filters.sizes.length > 0) {
-    params.push(`sizes=${filters.sizes.join(',')}`);
+    // O backend espera 'sizes'
+    params.set('sizes', filters.sizes.join(','));
   }
 
   if (filters.colors && filters.colors.length > 0) {
-    params.push(`colors=${filters.colors.join(',')}`);
+    params.set('colors', filters.colors.join(','));
   }
 
-  // Novo: suporte para filtro de gênero
   if (filters.gender && filters.gender.length > 0) {
-    params.push(`gender=${filters.gender.join(',')}`);
+    params.set('gender', filters.gender.join(','));
   }
 
-  // Novo: suporte para filtro de tags/categorias
-  if (filters.tags && filters.tags.length > 0) {
-    params.push(`tags=${filters.tags.join(',')}`);
+  if (filters.category && filters.category.length > 0) {
+    params.set('category', filters.category.join(','));
   }
 
   if (filters.price) {
-    if (filters.price.min !== undefined && filters.price.min !== '') {
-      const minPrice = parseFloat(filters.price.min);
-      if (!isNaN(minPrice)) {
-        params.push(`minPrice=${minPrice}`);
-      }
+    if (filters.price.min) {
+      params.set('minPrice', filters.price.min);
     }
-    if (filters.price.max !== undefined && filters.price.max !== '') {
-      const maxPrice = parseFloat(filters.price.max);
-      if (!isNaN(maxPrice)) {
-        params.push(`maxPrice=${maxPrice}`);
-      }
+    if (filters.price.max) {
+      params.set('maxPrice', filters.price.max);
     }
   }
 
-  // Adicionar suporte para ordenação
-  if (filters.sortBy) {
-    params.push(`sortBy=${filters.sortBy}`);
+  // Corrigir o envio da ordenação para usar o mapeamento adequado
+  if (filters.sortBy && filters.sortBy !== 'relevance') {
+    // Usar a função de mapeamento para converter os valores de ordenação
+    const mappedSort = mapSortByToBackend(filters.sortBy);
+    params.set('sort', mappedSort);
   }
 
-  if (params.length > 0) {
-    url += `?${params.join('&')}`;
+  // Construir a URL
+  const url = `${import.meta.env.VITE_API_URL}/api/sneakers${
+    params.toString() ? `?${params.toString()}` : ''
+  }`;
+
+  // Implementação de deduplicação de requisições
+  const requestKey = url;
+  
+  // Se já existe uma requisição pendente com esta mesma URL, retorne a promise existente
+  if (pendingRequests[requestKey]) {
+    return pendingRequests[requestKey];
   }
 
-  const response = await fetch(url);
+  try {
+    // Cria a promise da requisição e armazena no objeto de requisições pendentes
+    const requestPromise = fetch(url)
+      .then(async (response) => {
+        if (!response.ok) {
+          const errorText = await response.text();
+          console.error('Erro na resposta:', errorText);
+          throw new Error(`Falha ao buscar tênis: ${response.statusText}`);
+        }
+        return response.json();
+      })
+      .then((data) => {
+        return data;
+      })
+      .finally(() => {
+        // Remove esta requisição do objeto de requisições pendentes quando concluída
+        delete pendingRequests[requestKey];
+      });
 
-  if (!response.ok) {
-    throw new Error('Falha ao buscar tênis');
+    // Armazena a promise para potenciais requisições duplicadas
+    pendingRequests[requestKey] = requestPromise;
+    
+    return requestPromise;
+  } catch (error) {
+    console.error('Erro ao buscar tênis:', error);
+    // Limpa a requisição pendente em caso de erro
+    delete pendingRequests[requestKey];
+    throw error;
   }
-
-  return response.json();
 };
+
+// Função auxiliar para mapear valores de ordenação do frontend para o backend
+function mapSortByToBackend(sortBy) {
+  switch (sortBy) {
+    case 'price_asc':
+      return 'basePrice';
+    case 'price_desc':
+      return '-basePrice';
+    case 'newest':
+      return '-createdAt';
+    case 'popular':
+      return '-rating';
+    case 'discount_desc':
+      return '-baseDiscount';
+    default:
+      return '-relevance'; // Padrão para relevância
+  }
+}
 
 export const getSneakerBySlug = async (slug) => {
   // Atualização para usar URL base da variável de ambiente e popular variantes/reviews

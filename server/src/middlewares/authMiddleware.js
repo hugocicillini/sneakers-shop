@@ -4,8 +4,6 @@ import { User } from '../models/userModel.js';
 // Middleware para verificar autenticação
 export const authMiddleware = async (req, res, next) => {
   try {
-    // Log para debug
-    console.log('Headers recebidos:', req.headers);
     
     // Verificar token
     const authHeader = req.headers.authorization;
@@ -14,11 +12,9 @@ export const authMiddleware = async (req, res, next) => {
     }
 
     const token = authHeader.split(' ')[1];
-    console.log('Token recebido:', token.substring(0, 20) + '...');
     
     // Verificar validade do token
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    console.log('Token decodificado:', decoded);
     
     // Buscar usuário
     const user = await User.findById(decoded.id).select('-password');

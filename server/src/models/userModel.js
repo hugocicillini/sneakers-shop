@@ -27,14 +27,7 @@ const userSchema = new mongoose.Schema(
       type: Boolean,
       default: true,
     },
-    lastLogin: Date,
-    // Campo discriminador para identificar o tipo de usuário
-    userType: {
-      type: String,
-      required: true,
-      enum: ['client', 'admin'],
-      default: 'client',
-    },
+    lastLogin: Date
   },
   {
     timestamps: true,

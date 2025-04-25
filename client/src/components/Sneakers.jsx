@@ -7,7 +7,8 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { getSneakers } from '@/services/sneakers.service';
 import { ChevronDown } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import Filter from './Filter';
 import SneakersList from './SneakersList';
 import {
@@ -21,20 +22,37 @@ import {
 } from './ui/pagination';
 
 const Sneakers = ({ search }) => {
+  // Flag para controlar se é a primeira renderização
+  const isFirstRender = useRef(true);
+  // Referência para armazenar a última requisição
+  const lastFetchTimestamp = useRef(0);
+  // Armazenar os últimos parâmetros de busca para evitar duplicação
+  const lastFetchParams = useRef(null);
+
+  const [searchParams, setSearchParams] = useSearchParams();
   const [sneakersList, setSneakersList] = useState([]);
   const [loading, setLoading] = useState(true);
   const [currentPage, setCurrentPage] = useState(1);
   const [sneakersPerPage] = useState(20);
   const [totalSneakers, setTotalSneakers] = useState(0);
-  const [sortBy, setSortBy] = useState('relevance'); // Garante que inicia com a ordenação por relevância
+
+  // Inicializar sortBy a partir dos parâmetros de URL
+  const [sortBy, setSortBy] = useState(
+    searchParams.get('sortBy') || 'relevance'
+  );
+
   const [activeFilters, setActiveFilters] = useState({
-    brands: [],
-    sizes: [],
-    colors: [],
-    price: { min: '', max: '' },
-    gender: [],
-    tags: [],
-    sortBy: 'relevance', // Também aqui
+    brands: searchParams.get('brand')?.split(',').filter(Boolean) || [],
+    sizes:
+      searchParams.get('sizes')?.split(',').map(Number).filter(Boolean) || [],
+    colors: searchParams.get('colors')?.split(',').filter(Boolean) || [],
+    price: {
+      min: searchParams.get('minPrice') || '',
+      max: searchParams.get('maxPrice') || '',
+    },
+    gender: searchParams.get('gender')?.split(',').filter(Boolean) || [],
+    tags: searchParams.get('tags')?.split(',').filter(Boolean) || [],
+    sortBy: searchParams.get('sortBy') || 'relevance',
   });
 
   const sortOptions = [
@@ -47,52 +65,119 @@ const Sneakers = ({ search }) => {
 
   const [isFilterOpen, setIsFilterOpen] = useState(false);
 
-  const fetchSneakers = async (brandOrFilters = null) => {
-    setLoading(true);
-    try {
-      let filtersToApply;
+  // Modificar a função fetchSneakers para usar memoização e evitar duplicação
+  const fetchSneakers = useCallback(
+    async (brandOrFilters = null) => {
+      // Verificar se os parâmetros são os mesmos da última chamada
+      const currentParams = JSON.stringify({
+        page: currentPage,
+        search,
+        filters: brandOrFilters || activeFilters,
+      });
 
-      if (typeof brandOrFilters === 'string') {
-        filtersToApply = { ...activeFilters, brands: [brandOrFilters] };
-        setActiveFilters((prev) => ({ ...prev, brands: [brandOrFilters] }));
-      } else if (brandOrFilters && typeof brandOrFilters === 'object') {
-        filtersToApply = brandOrFilters;
-      } else {
-        filtersToApply = activeFilters;
+      const now = Date.now();
+      // Evitar chamadas duplicadas em menos de 300ms
+      if (
+        currentParams === lastFetchParams.current &&
+        now - lastFetchTimestamp.current < 300
+      ) {
+        return;
       }
 
-      const response = await getSneakers(
-        currentPage,
-        sneakersPerPage,
-        search,
-        filtersToApply
-      );
+      setLoading(true);
+      lastFetchParams.current = currentParams;
+      lastFetchTimestamp.current = now;
 
-      setSneakersList(response.data);
-      setTotalSneakers(response.total);
-    } catch (error) {
-      console.error('Error fetching sneakers:', error);
-    }
-    setLoading(false);
-  };
+      try {
+        let filtersToApply;
 
+        if (typeof brandOrFilters === 'string') {
+          filtersToApply = { ...activeFilters, brands: [brandOrFilters] };
+          setActiveFilters((prev) => ({ ...prev, brands: [brandOrFilters] }));
+        } else if (brandOrFilters && typeof brandOrFilters === 'object') {
+          filtersToApply = brandOrFilters;
+        } else {
+          filtersToApply = activeFilters;
+        }
+
+        const response = await getSneakers(
+          currentPage,
+          sneakersPerPage,
+          search,
+          filtersToApply
+        );
+
+        setSneakersList(response.data);
+        setTotalSneakers(response.total);
+      } catch (error) {
+        console.error('Error fetching sneakers:', error);
+      }
+      setLoading(false);
+    },
+    [currentPage, sneakersPerPage, search, activeFilters]
+  );
+
+  // Modificar o useEffect para evitar chamadas desnecessárias
   useEffect(() => {
-    fetchSneakers();
-  }, [currentPage, search]);
+    // Pular a primeira renderização para evitar chamadas duplicadas
+    if (isFirstRender.current) {
+      isFirstRender.current = false;
+      fetchSneakers();
+      return;
+    }
+
+    // Usar um debounce para chamadas subsequentes
+    const handler = setTimeout(() => {
+      fetchSneakers();
+    }, 100);
+
+    return () => clearTimeout(handler);
+  }, [currentPage, search, fetchSneakers]);
+
+  // Sincronizar com mudanças nos parâmetros de URL
+  useEffect(() => {
+    const sortByParam = searchParams.get('sortBy');
+    if (sortByParam !== sortBy) {
+      setSortBy(sortByParam || 'relevance');
+      setActiveFilters((prev) => ({
+        ...prev,
+        sortBy: sortByParam || 'relevance',
+      }));
+    }
+  }, [searchParams, sortBy]);
 
   const handleFilterChange = (filters) => {
-    setActiveFilters(filters);
-    setSortBy('relevance'); // Atualiza a ordenação com base nos filtros
+    // Preservar a ordenação atual quando filtros são aplicados
+    const filtersWithCurrentSort = {
+      ...filters,
+      sortBy: sortBy,
+    };
+
+    setActiveFilters(filtersWithCurrentSort);
     setCurrentPage(1); // Resetar para a primeira página ao aplicar filtros
-    fetchSneakers(filters);
+    fetchSneakers(filtersWithCurrentSort);
     setIsFilterOpen(false);
   };
 
   const handleSortChange = (sortValue) => {
+    // Atualizar ordenação no estado
     setSortBy(sortValue);
-    setCurrentPage(1); // Resetar para a primeira página ao aplicar ordenação
+
+    // Atualizar a ordenação nos filtros ativos
     const newFilters = { ...activeFilters, sortBy: sortValue };
     setActiveFilters(newFilters);
+
+    // Atualizar na URL
+    const params = new URLSearchParams(searchParams);
+    if (sortValue && sortValue !== 'relevance') {
+      params.set('sortBy', sortValue);
+    } else {
+      params.delete('sortBy');
+    }
+    setSearchParams(params);
+
+    // Buscar com nova ordenação
+    setCurrentPage(1);
     fetchSneakers(newFilters);
   };
 

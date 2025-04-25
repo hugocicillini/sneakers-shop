@@ -10,8 +10,6 @@ const SneakersList = ({ sneakers }) => {
   const { isFavorite, toggleFavorite, loading } = useFavorites();
   const [pendingActions, setPendingActions] = useState({});
 
-  console.log('SneakersList', sneakers);
-
   // Função para formatar preço em reais
   const formatPrice = (price) => {
     // Verificar se o preço é válido antes de formatar
@@ -171,7 +169,6 @@ const SneakersList = ({ sneakers }) => {
                   onClick={(e) => {
                     e.preventDefault();
                     // Lógica para adicionar ao carrinho
-                    console.log('Adicionar ao carrinho:', item);
                   }}
                 >
                   <ShoppingCart size={18} />

@@ -10,12 +10,6 @@ const isAuthenticated = () => {
 const getAuthHeaders = () => {
   const token = localStorage.getItem('token');
   
-  // Adicionar log para debug
-  console.log('Token encontrado:', token ? 'Sim' : 'Não');
-  if (token) {
-    console.log('Primeiros 20 caracteres do token:', token.substring(0, 20) + '...');
-  }
-  
   return {
     'Content-Type': 'application/json',
     ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
@@ -39,25 +33,12 @@ const processApiResponse = async (response) => {
 export const getCart = async () => {
   try {
     if (isAuthenticated()) {
-      console.log('Buscando carrinho para usuário autenticado');
-
-      // Log para debug
-      console.log('URL da API:', `${import.meta.env.VITE_API_URL}/cart`);
-      console.log(
-        'Token:',
-        localStorage.getItem('token').substring(0, 20) + '...'
-      );
-
       // Buscar carrinho do servidor para usuários autenticados
       const response = await fetch(`${import.meta.env.VITE_API_URL}/cart`, {
         method: 'GET',
         headers: getAuthHeaders()
         // Removido credentials: 'include'
       });
-
-      // Log para debug
-      console.log('Status da resposta:', response.status);
-      console.log('Headers da resposta:', [...response.headers.entries()]);
 
       if (!response.ok) {
         if (response.status === 401) {
@@ -74,7 +55,6 @@ export const getCart = async () => {
       }
 
       const data = await processApiResponse(response);
-      console.log('Dados do carrinho recebidos:', data);
 
       // Se o servidor retorna o carrinho em um formato diferente, ajustamos aqui
       return data.cart || data;
@@ -136,10 +116,7 @@ export const addToCart = async (item) => {
       };
 
       // Obter headers com autenticação
-      const headers = getAuthHeaders();
-      console.log('Enviando headers:', headers);
-
-      console.log('Enviando dados para a API:', JSON.stringify(payload, null, 2));
+      const headers = getAuthHeaders();;
       
       // Adicionar ao carrinho no servidor para usuários autenticados
       const response = await fetch(`${import.meta.env.VITE_API_URL}/cart`, {
@@ -147,9 +124,6 @@ export const addToCart = async (item) => {
         headers: headers,
         body: JSON.stringify(payload)
       });
-      
-      // Log para debug
-      console.log('Status da resposta:', response.status);
       
       if (!response.ok) {
         // Tentar obter o corpo da resposta de erro
@@ -167,7 +141,6 @@ export const addToCart = async (item) => {
       }
       
       const result = await processApiResponse(response);
-      console.log('Resposta do servidor (carrinho):', result);
       return result;
     } else {
       // Fallback para localStorage para usuários não autenticados
@@ -190,12 +163,6 @@ export const addToCart = async (item) => {
         // CORREÇÃO: Somar a nova quantidade à quantidade existente
         // Assim, mesmo após recarregar a página, a quantidade será mantida
         const combinedQuantity = existingItem.quantity + item.quantity;
-
-        // Para debugging
-        console.log('Item existente:', existingItem);
-        console.log('Quantidade existente:', existingItem.quantity);
-        console.log('Nova quantidade a adicionar:', item.quantity);
-        console.log('Quantidade combinada:', combinedQuantity);
 
         // Atualiza o item existente SOMANDO a quantidade
         updatedItem = {

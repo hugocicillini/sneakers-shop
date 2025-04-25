@@ -5,7 +5,7 @@ import {
   getUserAddresses,
   getUserDefaultAddress,
   updateAddress,
-} from '../controllers/addressesController.js';
+} from '../controllers/addressController.js';
 
 const router = express.Router();
 

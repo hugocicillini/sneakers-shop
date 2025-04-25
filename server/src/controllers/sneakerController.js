@@ -1,44 +1,80 @@
+import { Brand } from '../models/brandModel.js';
+import { Category } from '../models/categoryModel.js'; // Importar o modelo Category
+import '../models/reviewModel.js'; // Apenas registra o modelo no Mongoose
 import { Sneaker } from '../models/sneakerModel.js';
 import { SneakerVariant } from '../models/sneakerVariantModel.js';
-
-import '../models/reviewModel.js'; // Apenas registra o modelo no Mongoose
 
 export const getSneakers = async (req, res) => {
   try {
     let filter = { isActive: true }; // Por padrão, retornar apenas produtos ativos
 
     // Filtro por texto (busca em nome ou marca)
-    if (req.query.search && req.query.search !== 'All') {
+    if (req.query.search) {
       const searchRegex = new RegExp(req.query.search, 'i');
-      filter = {
-        $or: [{ brand: searchRegex }, { name: searchRegex }],
-      };  
+      filter.$or = [{ name: searchRegex }, { brand: searchRegex }];
     }
 
     // Filtro específico por marca
     if (req.query.brand) {
-      filter.brand = new RegExp(req.query.brand, 'i');
+      const brandNames = req.query.brand.split(',');
+
+      // Primeiro encontrar os IDs das marcas pelo nome ou slug
+      const brandQueries = brandNames.map((brandName) => ({
+        $or: [
+          { name: new RegExp(brandName, 'i') },
+          { slug: new RegExp(brandName, 'i') },
+        ],
+      }));
+
+      const brands = await Brand.find({ $or: brandQueries });
+      const brandIds = brands.map((brand) => brand._id);
+
+      if (brandIds.length > 0) {
+        filter.brand = { $in: brandIds };
+      }
     }
 
-    // Filtro por tamanhos
+    // Filtro por categoria - nova funcionalidade
+    if (req.query.category) {
+      const categoryNames = req.query.category.split(',');
+
+      // Buscar categorias pelo nome ou slug, similar ao filtro de marcas
+      const categoryQueries = categoryNames.map((categoryName) => ({
+        $or: [
+          { name: new RegExp(categoryName, 'i') },
+          { slug: new RegExp(categoryName, 'i') },
+        ],
+      }));
+
+      const categories = await Category.find({ $or: categoryQueries });
+      const categoryIds = categories.map((category) => category._id);
+
+      if (categoryIds.length > 0) {
+        filter.category = { $in: categoryIds };
+      }
+    }
+
+    // Filtro por tamanhos - usando o campo correto do modelo
     if (req.query.sizes) {
       const sizes = req.query.sizes.split(',').map((size) => parseInt(size));
-      filter.sizes = { $in: sizes };
+      filter.availableSizes = { $in: sizes };
     }
 
-    // Filtro por cores
+    // Filtro por cores - usando a estrutura correta do modelo
     if (req.query.colors) {
       const colors = req.query.colors.split(',');
-      filter.colors = { $in: colors };
+      filter['availableColors.color'] = {
+        $in: colors.map((color) => new RegExp(color, 'i')),
+      };
     }
 
-    // Novo filtro por gênero
+    // Filtro por gênero
     if (req.query.gender) {
       const genders = req.query.gender.split(',');
       filter.gender = { $in: genders };
     }
 
-    // Novo filtro por tags
+    // Filtro por tags
     if (req.query.tags) {
       const tags = req.query.tags.split(',');
       filter.tags = { $in: tags };
@@ -46,52 +82,37 @@ export const getSneakers = async (req, res) => {
 
     // Filtro por faixa de preço
     if (req.query.minPrice || req.query.maxPrice) {
-      filter.price = {};
+      filter.basePrice = {};
 
       if (req.query.minPrice) {
-        filter.price.$gte = parseFloat(req.query.minPrice);
+        filter.basePrice.$gte = parseFloat(req.query.minPrice);
       }
 
       if (req.query.maxPrice) {
-        filter.price.$lte = parseFloat(req.query.maxPrice);
+        filter.basePrice.$lte = parseFloat(req.query.maxPrice);
       }
-    }
-
-    // Adicionar opção para exibir produtos inativos para admins
-    if (req.query.showInactive === 'true' && req.user?.isAdmin) {
-      delete filter.isActive;
     }
 
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 10;
     const skip = (page - 1) * limit;
 
-    // Opções de ordenação
+    // Opções de ordenação melhoradas
     const sortOptions = {};
-    if (req.query.sortBy) {
-      switch (req.query.sortBy) {
-        case 'price_asc':
-          sortOptions.price = 1;
-          break;
-        case 'price_desc':
-          sortOptions.price = -1;
-          break;
-        case 'newest':
-          sortOptions.createdAt = -1;
-          break;
-        case 'popular':
-          sortOptions.rating = -1;
-          break;
-        case 'discount_desc':
-          sortOptions.discount = -1; // Ordem decrescente para maiores descontos primeiro
-          break;
-        case 'relevance': // Nova opção de relevância para o padrão
-          sortOptions.isFeatured = -1; // Primeiro produtos em destaque
-          sortOptions.rating = -1; // Depois por melhor avaliação
-          break;
-        default:
-          sortOptions.createdAt = -1;
+    if (req.query.sort) {
+      // Suporte para múltiplos campos de ordenação
+      const sortFields = req.query.sort.split(',');
+
+      for (const field of sortFields) {
+        if (field.startsWith('-')) {
+          sortOptions[field.substring(1)] = -1;
+        } else {
+          sortOptions[field] = 1;
+        }
       }
+    } else {
+      // Ordenação padrão
+      sortOptions.isFeatured = -1;
     }
 
     const total = await Sneaker.countDocuments(filter);
@@ -99,9 +120,11 @@ export const getSneakers = async (req, res) => {
       .sort(sortOptions)
       .skip(skip)
       .limit(limit)
+      .populate('brand', 'name slug logo') // Populate brand info
+      .populate('category', 'name slug') // Populate category info
       .select(
-        'name slug basePrice baseDiscount shortDescription coverImage brand rating reviewCount defaultColor isFeatured'
-      ); // Excluir descrição completa para economizar largura de banda
+        'name slug basePrice baseDiscount shortDescription coverImage brand category rating reviewCount defaultColor isFeatured'
+      );
 
     return res.status(200).json({
       total,
@@ -112,7 +135,9 @@ export const getSneakers = async (req, res) => {
     });
   } catch (error) {
     console.error('Erro ao buscar sneakers:', error);
-    res.status(500).json({ message: 'Error fetching sneakers', error });
+    res
+      .status(500)
+      .json({ message: 'Error fetching sneakers', error: error.message });
   }
 };
 

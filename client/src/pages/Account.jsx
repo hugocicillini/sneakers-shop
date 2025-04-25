@@ -16,9 +16,9 @@ import {
   deleteUserAddress,
   updateUserAddress,
 } from '@/services/addresses.service';
-import { updateUser } from '@/services/users.service';
-import { ChevronDown, ChevronUp, Package } from 'lucide-react';
-import { useState } from 'react';
+import { getUserById, updateUser } from '@/services/users.service';
+import { ChevronDown, ChevronUp, Loader2, Package } from 'lucide-react';
+import { useEffect, useState } from 'react';
 
 const Account = () => {
   const { user, updateUserState } = useAuth();
@@ -70,6 +70,51 @@ const Account = () => {
     },
   ]);
   const [loading, setLoading] = useState(true);
+
+  // Função para carregar todos os dados do usuário
+  const getUserData = async () => {
+    try {
+      setLoading(true);
+      // Se não temos um ID de usuário, não podemos carregar os dados
+      if (!user?._id) {
+        setLoading(false);
+        return;
+      }
+
+      const response = await getUserById(user._id);
+
+      if (response.success) {
+        // Atualiza o estado do usuário com todos os dados recebidos
+        updateUserState(response.user, { merge: true });
+
+        // Se houver pedidos no response, atualize-os também
+        if (response.user.orders) {
+          setOrders(response.user.orders);
+        }
+      } else {
+        toast({
+          title: 'Erro ao carregar dados',
+          description:
+            'Não foi possível carregar seus dados. Por favor, tente novamente.',
+          variant: 'destructive',
+        });
+      }
+    } catch (error) {
+      console.error('Erro ao obter dados do usuário:', error);
+      toast({
+        title: 'Erro ao carregar dados',
+        description:
+          'Ocorreu um erro ao carregar seus dados. Por favor, tente novamente.',
+        variant: 'destructive',
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    getUserData();
+  }, [user._id]); // Executar quando o ID do usuário mudar
 
   const handleUserUpdated = async (updatedUserData) => {
     try {
@@ -249,201 +294,210 @@ const Account = () => {
           <span>Minha Conta</span>
         </h1>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <div className="lg:col-span-1 space-y-6">
-            {/* Card de Dados Pessoais */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex justify-between items-center">
-                  <span>Dados Pessoais</span>
-                  <ProfileDialog onUserUpdated={handleUserUpdated} />
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-3">
-                  <div>
-                    <p className="text-sm font-medium text-gray-500">Nome</p>
-                    <p>{user?.name || 'Nome do usuário'}</p>
-                  </div>
-                  <div>
-                    <p className="text-sm font-medium text-gray-500">Email</p>
-                    <p>{user?.email || 'email@exemplo.com'}</p>
-                  </div>
-                  <div>
-                    <p className="text-sm font-medium text-gray-500">
-                      Telefone
-                    </p>
-                    <p>{user?.phone || '(11) 99999-9999'}</p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Card de Endereços */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex justify-between items-center">
-                  <span>Meus Endereços</span>
-                  <AddressDialog onAddressUpdated={handleAddressUpdated} />
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                {user.addresses.length > 0 ? (
-                  <div className="space-y-4 pt-2 overflow-y-auto max-h-96">
-                    {/* Ordenar endereços para colocar o padrão primeiro */}
-                    {user.addresses
-                      .sort(
-                        (a, b) =>
-                          (b.isDefault === true) - (a.isDefault === true)
-                      )
-                      .map((address) => (
-                        <div
-                          key={address._id}
-                          className={`p-4 border rounded-md relative ${
-                            address.isDefault
-                              ? 'border-primary border-2 bg-primary/5'
-                              : 'border-gray-200'
-                          }`}
-                        >
-                          {/* Badge para endereço padrão */}
-                          {address.isDefault && (
-                            <span className="absolute top-0 right-2 transform translate-x-1 -translate-y-1/2 bg-primary text-white text-xs px-2 py-0.5 rounded-full font-semibold">
-                              Padrão
-                            </span>
-                          )}
-
-                          <div className="flex justify-between mb-2">
-                            <span
-                              className={`font-medium ${
-                                address.isDefault ? 'text-primary' : ''
-                              }`}
-                            >
-                              {address.type}
-                            </span>
-                            <div>
-                              <AddressDialog
-                                address={address}
-                                onAddressUpdated={handleAddressUpdated}
-                                onAddressDeleted={handleAddressDeleted}
-                                isEditing={true}
-                              />
-                            </div>
-                          </div>
-
-                          <p className="text-sm text-gray-600">
-                            {address.street}, {address.number}
-                          </p>
-                          <p className="text-sm text-gray-600">
-                            {address.neighborhood}, {address.city} -{' '}
-                            {address.state}
-                          </p>
-                          <p className="text-sm text-gray-600">
-                            CEP: {address.zipCode}
-                          </p>
-                          <p className="text-sm text-gray-600">
-                            Destinatário: {address.recipient}
-                          </p>
-                        </div>
-                      ))}
-                  </div>
-                ) : (
-                  <p className="text-center py-6 text-gray-500">
-                    Você ainda não possui endereços cadastrados
-                  </p>
-                )}
-              </CardContent>
-            </Card>
+        {loading ? (
+          <div className="flex flex-col items-center justify-center min-h-[50vh]">
+            <Loader2 className="h-8 w-8 animate-spin text-primary" />
+            <p className="mt-4 text-gray-600">Carregando seus dados...</p>
           </div>
+        ) : (
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <div className="lg:col-span-1 space-y-6">
+              {/* Card de Dados Pessoais */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex justify-between items-center">
+                    <span>Dados Pessoais</span>
+                    <ProfileDialog onUserUpdated={handleUserUpdated} />
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-3">
+                    <div>
+                      <p className="text-sm font-medium text-gray-500">Nome</p>
+                      <p>{user?.name || 'Nome do usuário'}</p>
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-gray-500">Email</p>
+                      <p>{user?.email || 'email@exemplo.com'}</p>
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-gray-500">
+                        Telefone
+                      </p>
+                      <p>{user?.phone || '(11) 99999-9999'}</p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
 
-          {/* Coluna 2: Pedidos (2/3 da largura) */}
-          <div className="lg:col-span-2">
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Package size={20} />
-                  Meus Pedidos
-                </CardTitle>
-                <CardDescription>Histórico dos seus pedidos</CardDescription>
-              </CardHeader>
-              <CardContent>
-                {orders.length > 0 ? (
-                  <div className="space-y-4">
-                    {orders.map((order) => (
-                      <Card key={order.id} className="border">
-                        <CardHeader
-                          className="py-4 cursor-pointer"
-                          onClick={() => toggleOrderExpand(order.id)}
-                        >
-                          <div className="flex justify-between items-center">
-                            <div>
-                              <p className="font-medium">Pedido #{order.id}</p>
-                              <p className="text-sm text-gray-500">
-                                {order.date}
-                              </p>
-                            </div>
-                            <div className="flex items-center gap-3">
+              {/* Card de Endereços */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex justify-between items-center">
+                    <span>Meus Endereços</span>
+                    <AddressDialog onAddressUpdated={handleAddressUpdated} />
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  {user.addresses && user.addresses.length > 0 ? (
+                    <div className="space-y-4 pt-2 overflow-y-auto max-h-96">
+                      {/* Ordenar endereços para colocar o padrão primeiro */}
+                      {user.addresses
+                        .sort(
+                          (a, b) =>
+                            (b.isDefault === true) - (a.isDefault === true)
+                        )
+                        .map((address) => (
+                          <div
+                            key={address._id}
+                            className={`p-4 border rounded-md relative ${
+                              address.isDefault
+                                ? 'border-primary border-2 bg-primary/5'
+                                : 'border-gray-200'
+                            }`}
+                          >
+                            {/* Badge para endereço padrão */}
+                            {address.isDefault && (
+                              <span className="absolute top-0 right-2 transform translate-x-1 -translate-y-1/2 bg-primary text-white text-xs px-2 py-0.5 rounded-full font-semibold">
+                                Padrão
+                              </span>
+                            )}
+
+                            <div className="flex justify-between mb-2">
                               <span
-                                className={`text-sm px-2 py-1 rounded ${
-                                  order.status === 'Entregue'
-                                    ? 'bg-green-100 text-green-800'
-                                    : 'bg-blue-100 text-blue-800'
+                                className={`font-medium ${
+                                  address.isDefault ? 'text-primary' : ''
                                 }`}
                               >
-                                {order.status}
+                                {address.type}
                               </span>
-                              {expandedOrders[order.id] ? (
-                                <ChevronUp size={18} />
-                              ) : (
-                                <ChevronDown size={18} />
-                              )}
+                              <div>
+                                <AddressDialog
+                                  address={address}
+                                  onAddressUpdated={handleAddressUpdated}
+                                  onAddressDeleted={handleAddressDeleted}
+                                  isEditing={true}
+                                />
+                              </div>
                             </div>
-                          </div>
-                        </CardHeader>
 
-                        {expandedOrders[order.id] && (
-                          <>
-                            <CardContent className="pt-0">
-                              <div className="border-t my-2"></div>
-                              <div className="space-y-3">
-                                {order.items.map((item, idx) => (
-                                  <div
-                                    key={idx}
-                                    className="flex justify-between"
-                                  >
-                                    <div>
-                                      <p>{item.name}</p>
-                                      <p className="text-sm text-gray-500">
-                                        {item.color}, Tamanho: {item.size}, Qtd:{' '}
-                                        {item.quantity}
+                            <p className="text-sm text-gray-600">
+                              {address.street}, {address.number}
+                            </p>
+                            <p className="text-sm text-gray-600">
+                              {address.neighborhood}, {address.city} -{' '}
+                              {address.state}
+                            </p>
+                            <p className="text-sm text-gray-600">
+                              CEP: {address.zipCode}
+                            </p>
+                            <p className="text-sm text-gray-600">
+                              Destinatário: {address.recipient}
+                            </p>
+                          </div>
+                        ))}
+                    </div>
+                  ) : (
+                    <p className="text-center py-6 text-gray-500">
+                      Você ainda não possui endereços cadastrados
+                    </p>
+                  )}
+                </CardContent>
+              </Card>
+            </div>
+
+            {/* Coluna 2: Pedidos (2/3 da largura) */}
+            <div className="lg:col-span-2">
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Package size={20} />
+                    Meus Pedidos
+                  </CardTitle>
+                  <CardDescription>Histórico dos seus pedidos</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  {orders.length > 0 ? (
+                    <div className="space-y-4">
+                      {orders.map((order) => (
+                        <Card key={order.id} className="border">
+                          <CardHeader
+                            className="py-4 cursor-pointer"
+                            onClick={() => toggleOrderExpand(order.id)}
+                          >
+                            <div className="flex justify-between items-center">
+                              <div>
+                                <p className="font-medium">
+                                  Pedido #{order.id}
+                                </p>
+                                <p className="text-sm text-gray-500">
+                                  {order.date}
+                                </p>
+                              </div>
+                              <div className="flex items-center gap-3">
+                                <span
+                                  className={`text-sm px-2 py-1 rounded ${
+                                    order.status === 'Entregue'
+                                      ? 'bg-green-100 text-green-800'
+                                      : 'bg-blue-100 text-blue-800'
+                                  }`}
+                                >
+                                  {order.status}
+                                </span>
+                                {expandedOrders[order.id] ? (
+                                  <ChevronUp size={18} />
+                                ) : (
+                                  <ChevronDown size={18} />
+                                )}
+                              </div>
+                            </div>
+                          </CardHeader>
+
+                          {expandedOrders[order.id] && (
+                            <>
+                              <CardContent className="pt-0">
+                                <div className="border-t my-2"></div>
+                                <div className="space-y-3">
+                                  {order.items.map((item, idx) => (
+                                    <div
+                                      key={idx}
+                                      className="flex justify-between"
+                                    >
+                                      <div>
+                                        <p>{item.name}</p>
+                                        <p className="text-sm text-gray-500">
+                                          {item.color}, Tamanho: {item.size},
+                                          Qtd: {item.quantity}
+                                        </p>
+                                      </div>
+                                      <p className="font-medium">
+                                        R$ {item.price.toFixed(2)}
                                       </p>
                                     </div>
-                                    <p className="font-medium">
-                                      R$ {item.price.toFixed(2)}
-                                    </p>
-                                  </div>
-                                ))}
-                              </div>
-                            </CardContent>
-                            <CardFooter className="flex justify-between border-t pt-4">
-                              <span className="font-bold">Total</span>
-                              <span className="font-bold">
-                                R$ {order.total.toFixed(2)}
-                              </span>
-                            </CardFooter>
-                          </>
-                        )}
-                      </Card>
-                    ))}
-                  </div>
-                ) : (
-                  <p className="text-center py-10 text-gray-500">
-                    Você ainda não possui pedidos
-                  </p>
-                )}
-              </CardContent>
-            </Card>
+                                  ))}
+                                </div>
+                              </CardContent>
+                              <CardFooter className="flex justify-between border-t pt-4">
+                                <span className="font-bold">Total</span>
+                                <span className="font-bold">
+                                  R$ {order.total.toFixed(2)}
+                                </span>
+                              </CardFooter>
+                            </>
+                          )}
+                        </Card>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-center py-10 text-gray-500">
+                      Você ainda não possui pedidos
+                    </p>
+                  )}
+                </CardContent>
+              </Card>
+            </div>
           </div>
-        </div>
+        )}
       </div>
     </LayoutBase>
   );
