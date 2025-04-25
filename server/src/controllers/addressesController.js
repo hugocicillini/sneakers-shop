@@ -1,4 +1,4 @@
-import { Addresses } from '../models/addressesModel.js';
+import { Address } from '../models/addressModel.js';
 
 /**
  * Busca todos os endereços de um usuário

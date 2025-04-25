@@ -1,4 +1,3 @@
-import { useAuth } from '@/contexts/AuthContext';
 import { useFavorites } from '@/contexts/FavoritesContext';
 import { Heart, ShoppingCart, Star } from 'lucide-react';
 import { useState } from 'react';
@@ -10,6 +9,17 @@ import { Card, CardContent, CardFooter, CardTitle } from './ui/card';
 const SneakersList = ({ sneakers }) => {
   const { isFavorite, toggleFavorite, loading } = useFavorites();
   const [pendingActions, setPendingActions] = useState({});
+
+  console.log('SneakersList', sneakers);
+
+  // Função para formatar preço em reais
+  const formatPrice = (price) => {
+    // Verificar se o preço é válido antes de formatar
+    if (price === undefined || price === null) {
+      return '0,00';
+    }
+    return price.toFixed(2).replace('.', ',');
+  };
 
   // Função para favoritar/desfavoritar um item
   const handleToggleFavorite = async (sneakerId, event) => {
@@ -39,7 +49,7 @@ const SneakersList = ({ sneakers }) => {
             className="no-underline text-inherit"
           >
             <Card className="flex flex-col h-full overflow-hidden transition-all duration-300 hover:shadow-lg group relative">
-              {/* Badge para desconto e destaque no canto direito, um embaixo do outro */}
+              {/* Badge para desconto e destaque no canto direito */}
               <div className="absolute top-0 right-0 z-20 flex flex-col">
                 {item.isFeatured && (
                   <Badge
@@ -52,9 +62,8 @@ const SneakersList = ({ sneakers }) => {
               </div>
 
               <div className="relative w-full overflow-hidden bg-gray-50">
-                {/* Altura responsiva - maior em mobile, menor em desktop */}
                 <div className="w-full h-[280px] sm:h-[220px] transition-all duration-300">
-                  {/* Botão de favoritar permanece no topo esquerdo */}
+                  {/* Botão de favoritar */}
                   <button
                     className={`absolute top-2 left-2 z-10 p-1.5 bg-white rounded-full shadow-sm transition-all duration-300 
                       ${
@@ -85,20 +94,16 @@ const SneakersList = ({ sneakers }) => {
                     />
                   </button>
 
-                  {/* Suporte para múltiplas imagens */}
+                  {/* Imagem do produto - ajustado para usar coverImage ou fallback */}
                   <img
                     src={
-                      item.images && item.images.length > 0
+                      item.coverImage?.url ||
+                      (item.images && item.images.length > 0
                         ? item.images.find((img) => img.isPrimary)?.url ||
                           item.images[0].url
-                        : item.image || '/placeholder-product.png'
+                        : item.image || '/placeholder-product.png')
                     }
-                    alt={
-                      item.images && item.images.length > 0
-                        ? item.images.find((img) => img.isPrimary)?.alt ||
-                          item.name
-                        : item.name
-                    }
+                    alt={item.coverImage?.alt || item.name}
                     className="w-full h-full object-cover sm:object-cover rounded-t-xl transition-transform duration-500 group-hover:scale-105 bg-white"
                   />
                 </div>
@@ -120,29 +125,31 @@ const SneakersList = ({ sneakers }) => {
                   <div className="flex flex-col">
                     <div className="flex items-center mb-1">
                       <span className="text-sm text-gray-500 mr-2">Preço</span>
-                      {item.discount > 0 && (
+                      {item.baseDiscount > 0 && (
                         <Badge
                           variant="destructive"
                           className="rounded-md text-xs px-1.5 py-0 h-5 min-w-0"
                         >
-                          -{item.discount}%
+                          -{item.baseDiscount}%
                         </Badge>
                       )}
                     </div>
-                    {item.discount > 0 ? (
+                    {item.basePrice && item.baseDiscount > 0 ? (
                       <div>
                         <span className="font-bold text-xl text-primary">
                           R${' '}
-                          {item.finalPrice ||
-                            (item.price * (1 - item.discount / 100)).toFixed(2)}
+                          {formatPrice(
+                            item.finalPrice ||
+                              item.basePrice * (1 - item.baseDiscount / 100)
+                          )}
                         </span>
                         <span className="text-sm text-gray-500 line-through ml-2">
-                          R$ {item.price.toFixed(2)}
+                          R$ {formatPrice(item.basePrice)}
                         </span>
                       </div>
                     ) : (
                       <span className="font-bold text-xl text-primary">
-                        R$ {item.price.toFixed(2)}
+                        R$ {formatPrice(item.basePrice || item.price || 0)}
                       </span>
                     )}
                   </div>
@@ -164,6 +171,7 @@ const SneakersList = ({ sneakers }) => {
                   onClick={(e) => {
                     e.preventDefault();
                     // Lógica para adicionar ao carrinho
+                    console.log('Adicionar ao carrinho:', item);
                   }}
                 >
                   <ShoppingCart size={18} />

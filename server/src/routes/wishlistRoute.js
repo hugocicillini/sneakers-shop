@@ -4,8 +4,8 @@ import {
   getAllFavorites,
   getFavoritesById,
   removeFavorite,
-} from '../controllers/favoriteController.js';
-import authMiddleware from '../middlewares/authMiddleware.js';
+} from '../controllers/wishlistController.js';
+import { authMiddleware } from '../middlewares/authMiddleware.js';
 
 const router = express.Router();
 

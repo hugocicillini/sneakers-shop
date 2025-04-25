@@ -1,28 +1,68 @@
 import jwt from 'jsonwebtoken';
 import { User } from '../models/userModel.js';
 
-const authMiddleware = async (req, res, next) => {
-  const authHeader = req.headers.authorization;
-
-  if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    return res.status(401).json({ message: 'Unauthorized: No token provided' });
-  }
-
-  const token = authHeader.split(' ')[1];
-
+// Middleware para verificar autenticação
+export const authMiddleware = async (req, res, next) => {
   try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    const user = await User.findById(decoded.id);
-
-    if (!user) {
-      return res.status(404).json({ message: 'User not found' });
+    // Log para debug
+    console.log('Headers recebidos:', req.headers);
+    
+    // Verificar token
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return res.status(401).json({ success: false, message: 'Não autorizado, nenhum token fornecido' });
     }
 
-    req.user = { id: user._id, name: user.name, email: user.email };
+    const token = authHeader.split(' ')[1];
+    console.log('Token recebido:', token.substring(0, 20) + '...');
+    
+    // Verificar validade do token
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    console.log('Token decodificado:', decoded);
+    
+    // Buscar usuário
+    const user = await User.findById(decoded.id).select('-password');
+    if (!user) {
+      return res.status(401).json({ success: false, message: 'Usuário não encontrado' });
+    }
+
+    // Adicionar usuário ao request
+    req.user = user;
     next();
   } catch (error) {
-    return res.status(401).json({ message: 'Unauthorized: Invalid token' });
+    console.error('Erro no middleware de autenticação:', error);
+    return res.status(401).json({ success: false, message: 'Não autorizado', error: error.message });
   }
 };
 
-export default authMiddleware;
+// Middleware para autenticação opcional
+export const optionalAuth = async (req, res, next) => {
+  try {
+    const authHeader = req.headers.authorization;
+    
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      // Sem token, continua como usuário não autenticado
+      return next();
+    }
+
+    const token = authHeader.split(' ')[1];
+    
+    try {
+      const decoded = jwt.verify(token, process.env.JWT_SECRET);
+      const user = await User.findById(decoded.id).select('-password');
+      
+      if (user) {
+        req.user = user;
+      }
+    } catch (tokenError) {
+      // Erro no token, mas continuamos como não autenticado
+      console.log('Token inválido:', tokenError.message);
+    }
+    
+    next();
+  } catch (error) {
+    // Em caso de erro, continuamos como não autenticado
+    console.error('Erro no middleware de autenticação opcional:', error);
+    next();
+  }
+};

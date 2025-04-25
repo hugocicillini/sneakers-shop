@@ -12,6 +12,8 @@ import {
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import Search from '../components/Search';
+import Footer from '@/components/Footer';
+import { useCart } from '@/contexts/CartContext';
 
 const LayoutBase = ({ children, search, setSearch }) => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
@@ -22,8 +24,11 @@ const LayoutBase = ({ children, search, setSearch }) => {
 
   const { favorites } = useFavorites();
 
+  const { cartCount } = useCart(); // Adicionei o cartCount aqui para o carrinho
+
   // Calcular número de favoritos - garantir que sempre seja um número
   const favoritesCount = Array.isArray(favorites) ? favorites.length : 0;
+
 
   // Verificar tamanho da tela para determinar se é mobile
   useEffect(() => {
@@ -144,7 +149,7 @@ const LayoutBase = ({ children, search, setSearch }) => {
                 <ShoppingBag />
                 Carrinho
                 <span className="absolute -top-2 -right-2 bg-black text-white rounded-full h-5 w-5 flex items-center justify-center text-xs">
-                  1
+                  {cartCount}
                 </span>
               </Button>
             </Link>
@@ -244,7 +249,9 @@ const LayoutBase = ({ children, search, setSearch }) => {
       )}
 
       <main className="min-h-screen">{children}</main>
+      <Footer />
     </div>
+    
   );
 };
 

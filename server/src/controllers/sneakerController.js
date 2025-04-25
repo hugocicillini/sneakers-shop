@@ -1,5 +1,5 @@
-import { Sneakers } from '../models/sneakersModel.js';
-import { SneakersVariant } from '../models/sneakersVariantModel.js';
+import { Sneaker } from '../models/sneakerModel.js';
+import { SneakerVariant } from '../models/sneakerVariantModel.js';
 
 import '../models/reviewModel.js'; // Apenas registra o modelo no Mongoose
 
@@ -12,7 +12,7 @@ export const getSneakers = async (req, res) => {
       const searchRegex = new RegExp(req.query.search, 'i');
       filter = {
         $or: [{ brand: searchRegex }, { name: searchRegex }],
-      };
+      };  
     }
 
     // Filtro específico por marca
@@ -94,12 +94,14 @@ export const getSneakers = async (req, res) => {
       }
     }
 
-    const total = await Sneakers.countDocuments(filter);
-    const sneakers = await Sneakers.find(filter)
+    const total = await Sneaker.countDocuments(filter);
+    const sneakers = await Sneaker.find(filter)
       .sort(sortOptions)
       .skip(skip)
       .limit(limit)
-      .select('-description'); // Excluir descrição completa para economizar largura de banda
+      .select(
+        'name slug basePrice baseDiscount shortDescription coverImage brand rating reviewCount defaultColor isFeatured'
+      ); // Excluir descrição completa para economizar largura de banda
 
     return res.status(200).json({
       total,
@@ -114,17 +116,16 @@ export const getSneakers = async (req, res) => {
   }
 };
 
-export const getSneakerById = async (req, res) => {
+// Quando buscar detalhes de um sneaker específico, limitar a 5 reviews iniciais
+export const getSneakerBySlug = async (req, res) => {
   try {
-    const { id } = req.params;
+    const { slug } = req.params;
+    const { color } = req.query; // Cor opcional na URL
 
-
-    const sneaker = await Sneakers.findById(id)
-      .populate({
-        path: 'variants',
-        select: '-createdAt -updatedAt',
-        match: { isActive: true },
-      })
+    // Buscar o tênis completo
+    const sneaker = await Sneaker.findOne({ slug })
+      .populate('brand')
+      .populate('category')
       .populate({
         path: 'reviews',
         select: 'rating comment user date',
@@ -132,42 +133,105 @@ export const getSneakerById = async (req, res) => {
       });
 
     if (!sneaker) {
-      return res.status(404).json({ message: 'Sneaker not found!' });
+      return res.status(404).json({ message: 'Tênis não encontrado!' });
     }
 
-    return res.status(200).json(sneaker);
-  } catch (error) {
-    console.error('Erro ao buscar sneaker:', error);
-    res.status(500).json({ message: 'Error fetching sneaker', error });
-  }
-};
+    // Buscar variantes com uma única consulta para evitar múltiplas chamadas ao banco
+    const variants = await SneakerVariant.find({
+      sneaker: sneaker._id,
+      isActive: true,
+    });
 
-// Quando buscar detalhes de um sneaker específico, limitar a 5 reviews iniciais
-export const getSneakerBySlug = async (req, res) => {
-  try {
-    const { slug } = req.params;
+    const availableColors = [
+      ...new Set(variants.filter((v) => v.stock > 0).map((v) => v.color)),
+    ];
 
-    // Usar o populate para carregar variantes e reviews
-    const sneaker = await Sneakers.findOne({ slug: slug }) // Corrigido: passando um objeto de consulta
-      .populate({
-        path: 'variants', // Corrigido de 'variant' para 'variants'
-        select: '-createdAt -updatedAt', // Excluir campos desnecessários
-        match: { isActive: true }, // Apenas variantes ativas
-      })
-      .populate({
-        path: 'reviews', // Corrigido de 'review' para 'reviews'
-        select: 'rating comment user date',
-        options: { sort: { date: -1 }, limit: 5 }, // Limita a 5 reviews iniciais
-      });
+    // Determinar a cor a ser usada e verificar disponibilidade
+    let selectedColor;
+    let colorChangeMessage = null;
 
-    if (!sneaker) {
-      return res.status(404).json({ message: 'Sneaker not found!' });
+    if (color) {
+      if (availableColors.includes(color)) {
+        // A cor solicitada está disponível
+        selectedColor = color;
+      } else {
+        // A cor solicitada não está disponível, buscar alternativa
+        const defaultColor = sneaker.getDefaultColor();
+
+        if (availableColors.includes(defaultColor)) {
+          selectedColor = defaultColor;
+        } else if (availableColors.length > 0) {
+          selectedColor = availableColors[0];
+        } else {
+          // Caso extremo: nenhuma cor tem estoque
+          selectedColor = color; // Manter a cor solicitada mesmo sem estoque
+        }
+
+        colorChangeMessage = `A cor ${color} não está disponível. Mostrando ${selectedColor} como alternativa.`;
+      }
+    } else {
+      // Nenhuma cor foi especificada, usar a padrão
+      const defaultColor = sneaker.getDefaultColor();
+
+      if (availableColors.includes(defaultColor)) {
+        selectedColor = defaultColor;
+      } else if (availableColors.length > 0) {
+        selectedColor = availableColors[0];
+      } else {
+        selectedColor = sneaker.availableColors[0]?.color || 'default';
+      }
     }
 
-    return res.status(200).json(sneaker);
+    // Organizar os dados para a resposta
+    // Buscar imagens específicas da cor selecionada
+    const selectedColorImages = sneaker.getImagesByColor(selectedColor);
+
+    // Filtrar variantes da cor selecionada que tenham estoque
+    const availableSizes = variants
+      .filter((v) => v.color === selectedColor && v.stock > 0)
+      .map((v) => ({
+        size: v.size,
+        stock: v.stock,
+        price: v.price || sneaker.basePrice,
+        discount: v.discount !== undefined ? v.discount : sneaker.baseDiscount,
+        id: v._id,
+      }))
+      .sort((a, b) => a.size - b.size);
+
+    // Preparar informações de cores disponíveis
+    const colorVariants = sneaker.availableColors.map((c) => ({
+      ...(c.toObject ? c.toObject() : c),
+      isSelected: c.color === selectedColor,
+      hasStock: variants.some((v) => v.color === c.color && v.stock > 0),
+    }));
+
+    // Buscar tênis relacionados se existirem
+    let relatedSneakers = [];
+    if (sneaker.relatedSneakers && sneaker.relatedSneakers.length > 0) {
+      relatedSneakers = await Sneaker.find({
+        _id: { $in: sneaker.relatedSneakers },
+        isActive: true,
+      }).select('name basePrice coverImage slug baseDiscount brand');
+    }
+
+    // Resposta formatada
+    const response = {
+      ...sneaker.toObject(),
+      selectedColor,
+      colorImages: selectedColorImages,
+      availableSizes,
+      colorVariants,
+      relatedSneakers,
+      colorChangeMessage,
+    };
+
+    return res.status(200).json(response);
   } catch (error) {
-    console.error('Erro ao buscar sneaker:', error);
-    res.status(500).json({ message: 'Error fetching sneaker', error });
+    console.error('Erro ao buscar detalhes do tênis:', error);
+    res.status(500).json({
+      message: 'Erro ao carregar detalhes do tênis',
+      error: error.message,
+    });
   }
 };
 
@@ -176,13 +240,13 @@ export const createSneakers = async (req, res) => {
     const { sneakerData, variants } = req.body;
 
     // Criar o tênis principal
-    const newSneaker = new Sneakers(sneakerData);
+    const newSneaker = new Sneaker(sneakerData);
     await newSneaker.save();
 
     // Criar variantes se existirem
     if (variants && Array.isArray(variants)) {
       const variantPromises = variants.map((variant) => {
-        const newVariant = new SneakersVariant({
+        const newVariant = new SneakerVariant({
           ...variant,
           sneaker: newSneaker._id,
         });
@@ -193,7 +257,7 @@ export const createSneakers = async (req, res) => {
     }
 
     // Recuperar o tênis com as variantes para retornar na resposta
-    const createdSneaker = await Sneakers.findById(newSneaker._id).populate(
+    const createdSneaker = await Sneaker.findById(newSneaker._id).populate(
       'variants'
     );
 
@@ -213,7 +277,7 @@ export const updateSneaker = async (req, res) => {
     const { sneakerData, variants } = req.body;
 
     // Atualizar dados do tênis
-    const updatedSneaker = await Sneakers.findByIdAndUpdate(id, sneakerData, {
+    const updatedSneaker = await Sneaker.findByIdAndUpdate(id, sneakerData, {
       new: true,
       runValidators: true,
     });
@@ -227,14 +291,14 @@ export const updateSneaker = async (req, res) => {
       for (const variant of variants) {
         if (variant._id) {
           // Atualizar variante existente
-          await SneakersVariant.findByIdAndUpdate(
+          await SneakerVariant.findByIdAndUpdate(
             variant._id,
             { ...variant, sneaker: id },
             { runValidators: true }
           );
         } else {
           // Criar nova variante
-          const newVariant = new SneakersVariant({
+          const newVariant = new SneakerVariant({
             ...variant,
             sneaker: id,
           });
@@ -244,7 +308,7 @@ export const updateSneaker = async (req, res) => {
     }
 
     // Retornar o tênis atualizado com suas variantes
-    const result = await Sneakers.findById(id).populate('variants');
+    const result = await Sneaker.findById(id).populate('variants');
 
     res.status(200).json(result);
   } catch (error) {
@@ -261,7 +325,7 @@ export const deleteSneaker = async (req, res) => {
     const { id } = req.params;
 
     // Marcar como inativo em vez de excluir fisicamente
-    const sneaker = await Sneakers.findByIdAndUpdate(
+    const sneaker = await Sneaker.findByIdAndUpdate(
       id,
       { isActive: false },
       { new: true }
@@ -272,7 +336,7 @@ export const deleteSneaker = async (req, res) => {
     }
 
     // Também marcar todas as variantes como inativas
-    await SneakersVariant.updateMany({ sneaker: id }, { isActive: false });
+    await SneakerVariant.updateMany({ sneaker: id }, { isActive: false });
 
     res.status(200).json({
       message: 'Sneaker successfully deactivated',
@@ -292,7 +356,7 @@ export const getSneakerVariants = async (req, res) => {
   try {
     const { id } = req.params;
 
-    const variants = await SneakersVariant.find({
+    const variants = await SneakerVariant.find({
       sneaker: id,
       isActive: true,
     }).sort({ size: 1 });
@@ -313,7 +377,7 @@ export const updateVariantStock = async (req, res) => {
     const { variantId } = req.params;
     const { stock } = req.body;
 
-    const variant = await SneakersVariant.findByIdAndUpdate(
+    const variant = await SneakerVariant.findByIdAndUpdate(
       variantId,
       { stock },
       { new: true, runValidators: true }

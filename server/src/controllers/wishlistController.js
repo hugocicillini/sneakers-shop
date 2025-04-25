@@ -1,5 +1,5 @@
-import { Favorite } from '../models/favoriteModel.js';
-import { Sneakers } from '../models/sneakersModel.js';
+import { Wishlist } from '../models/wishlistModel.js';
+import { Sneaker } from '../models/sneakerModel.js';
 
 // Adicionar um tênis aos favoritos
 export const addFavorite = async (req, res) => {
@@ -19,10 +19,10 @@ export const addFavorite = async (req, res) => {
 
     const userId = req.user.id;
 
-    let favorite = await Favorite.findOne({ user: userId });
+    let favorite = await Wishlist.findOne({ user: userId });
 
     if (!favorite) {
-      favorite = new Favorite({ user: userId, sneakers: [sneakerId] });
+      favorite = new Wishlist({ user: userId, sneakers: [sneakerId] });
     } else {
       if (!favorite.sneakers.includes(sneakerId)) {
         favorite.sneakers.push(sneakerId);
@@ -41,7 +41,7 @@ export const addFavorite = async (req, res) => {
 
 export const getAllFavorites = async (req, res) => {
   try {
-    const favorites = await Favorite.find();
+    const favorites = await Wishlist.find();
 
     if (!favorites) {
       return res.status(404).json({ message: 'No favorites found' });
@@ -56,7 +56,7 @@ export const getAllFavorites = async (req, res) => {
 // Obtém os favoritos do usuário
 export const getFavoritesById = async (req, res) => {
   try {
-    const favorite = await Favorite.find({ user: req.user.id });
+    const favorite = await Wishlist.find({ user: req.user.id });
 
     if (!favorite) {
       return res.status(404).json({ message: 'No favorites found' });
@@ -73,7 +73,7 @@ export const removeFavorite = async (req, res) => {
   try {
     const { id } = req.params;
 
-    const favorite = await Favorite.findOne({ user: req.user.id });
+    const favorite = await Wishlist.findOne({ user: req.user.id });
 
     if (!favorite) {
       return res.status(404).json({ message: 'No favorites found' });
@@ -87,10 +87,10 @@ export const removeFavorite = async (req, res) => {
     favorite.sneakers.splice(index, 1);
 
     if (favorite.sneakers.length === 0) {
-      await Favorite.deleteOne({ _id: favorite._id });
+      await Wishlist.deleteOne({ _id: favorite._id });
       return res
         .status(200)
-        .json({ message: 'Favorite list deleted as it was empty' });
+        .json({ message: 'Wishlist deleted as it was empty' });
     }
 
     await favorite.save();

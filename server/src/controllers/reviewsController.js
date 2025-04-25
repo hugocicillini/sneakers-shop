@@ -1,6 +1,6 @@
 import mongoose from 'mongoose';
 import { Review } from '../models/reviewModel.js';
-import { Sneakers } from '../models/sneakersModel.js';
+import { Sneaker } from '../models/sneakerModel.js';
 
 /**
  * @desc    Obter todos os reviews (com paginação)

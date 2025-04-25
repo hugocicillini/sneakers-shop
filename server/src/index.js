@@ -6,11 +6,11 @@ import mongoose from 'mongoose';
 import { swaggerDocs, swaggerUi } from './config/swagger.js';
 
 import cartRoute from './routes/cartRoute.js';
-import favoriteRoute from './routes/favoriteRoute.js';
-import sneakersRoute from './routes/sneakersRoute.js';
-import usersRoute from './routes/usersRoute.js';
-import addressesRoute from './routes/addressesRoute.js';
-import reviewsRoute from './routes/reviewsRoute.js';
+import sneakerRoute from './routes/sneakerRoute.js';
+import userRoute from './routes/userRoute.js';
+import wishlistRoute from './routes/wishlistRoute.js';
+import addressRoute from './routes/addressRoute.js';
+import reviewRoute from './routes/reviewRoute.js';
 
 const app = express();
 
@@ -23,12 +23,12 @@ app.get('/', (req, res) => {
   return res.status(200).send('Server running!');
 });
 
-app.use('/sneakers', sneakersRoute);
-app.use('/users', usersRoute);
-app.use('/cart', cartRoute);
-app.use('/favorites', favoriteRoute);
-app.use('/addresses', addressesRoute);
-app.use('/reviews', reviewsRoute);
+app.use('/api/sneakers', sneakerRoute);
+app.use('/api/users', userRoute);
+app.use('/api/carts', cartRoute);
+app.use('/api/wishlists', wishlistRoute);
+app.use('/api/addresses', addressRoute);
+app.use('/api/reviews', reviewRoute);
 
 mongoose
   .connect(process.env.MONGO_URI)

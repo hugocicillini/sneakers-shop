@@ -4,7 +4,7 @@ export const getSneakers = async (
   search,
   filters = {}
 ) => {
-  let url = `${import.meta.env.VITE_API_URL}/sneakers`;
+  let url = `${import.meta.env.VITE_API_URL}/api/sneakers`;
 
   const params = [];
 
@@ -93,6 +93,83 @@ export const getSneakerBySlug = async (slug) => {
   if (!response.ok) {
     throw new Error('Failed to fetch sneaker details');
   }
+
+  const data = await response.json();
+
+  // Verifica se há variantes disponíveis e obtém a primeira cor em estoque
+  if (
+    data.variants &&
+    Array.isArray(data.variants) &&
+    data.variants.length > 0
+  ) {
+    // Filtra as variantes com estoque > 0 e agrupa por cor
+    const availableColors = {};
+    data.variants.forEach((variant) => {
+      if (variant.stock > 0 && variant.isActive) {
+        if (!availableColors[variant.color]) {
+          availableColors[variant.color] = true;
+        }
+      }
+    });
+
+    const availableColorsList = Object.keys(availableColors);
+
+    // Verifica se a cor padrão do produto tem estoque disponível
+    if (data.defaultColor && availableColors[data.defaultColor]) {
+      // Mantém a cor padrão do produto se estiver disponível
+    } else if (availableColorsList.length > 0) {
+      // Se não tiver cor padrão ou ela não estiver disponível, usa a primeira cor com estoque
+      data.defaultColor = availableColorsList[0];
+    }
+
+    // Busca imagens da cor padrão
+    if (data.defaultColor) {
+      const colorImageSet = data.colorImages?.find(
+        (item) => item.color.toLowerCase() === data.defaultColor.toLowerCase()
+      );
+
+      // Se houver imagens para a cor padrão, já as disponibiliza
+      if (colorImageSet && colorImageSet.images.length > 0) {
+        data.currentColorImages = colorImageSet.images;
+      }
+    }
+
+    // Adiciona lista de cores disponíveis
+    data.availableColors = availableColorsList;
+  }
+
+  return data;
+};
+
+// Novo método para buscar imagens de uma cor específica
+export const getSneakerColorImages = async (sneakerId, color) => {
+  const url = `${
+    import.meta.env.VITE_API_URL
+  }/sneakers/${sneakerId}/color/${color}/images`;
+
+  const response = await fetch(url);
+
+  if (!response.ok) {
+    throw new Error('Falha ao buscar imagens da cor selecionada');
+  }
+
+  return response.json();
+};
+
+// Método para verificar disponibilidade de uma cor específica
+export const checkColorAvailability = async (sneakerId, color) => {
+  const url = `${
+    import.meta.env.VITE_API_URL
+  }/sneakers/${sneakerId}/variants/availability`;
+
+  const params = color ? `?color=${encodeURIComponent(color)}` : '';
+
+  const response = await fetch(`${url}${params}`);
+
+  if (!response.ok) {
+    throw new Error('Falha ao verificar disponibilidade');
+  }
+
   return response.json();
 };
 
@@ -173,9 +250,21 @@ export const updateSneaker = async (id, data) => {
     sneakerData: {
       name: data.name,
       price: data.price,
-      // ...outros campos semelhantes ao createSneaker
+      brand: data.brand,
+      description: data.description,
+      shortDescription:
+        data.shortDescription || data.description?.substring(0, 150),
+      images: data.images || [{ url: data.image, isPrimary: true }],
+      sizes: data.sizes,
+      colors: data.colors,
+      gender: data.gender || 'unisex',
+      category: data.category,
+      tags: data.tags,
+      discount: data.discount || 0,
+      isActive: data.isActive !== false,
+      isFeatured: data.isFeatured || false,
     },
-    variants: data.variants,
+    variants: data.variants || generateVariantsFromSizesAndColors(data),
   };
 
   const response = await fetch(url, {

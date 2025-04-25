@@ -3,6 +3,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useAuth } from '@/contexts/AuthContext';
 import { useFavorites } from '@/contexts/FavoritesContext';
+import { useCart } from '@/contexts/CartContext';
 import { toast } from '@/hooks/use-toast';
 import LayoutBase from '@/layout/LayoutBase';
 import { getSneakerBySlug } from '@/services/sneakers.service';
@@ -20,12 +21,14 @@ const SneakerDetail = () => {
   const [selectedImage, setSelectedImage] = useState(null);
   const [selectedSize, setSelectedSize] = useState(null);
   const [selectedColor, setSelectedColor] = useState(null);
+  const [colorImages, setColorImages] = useState([]); // Novo estado para as imagens da cor
   const [quantity, setQuantity] = useState(1);
 
   // Usando os contexts para favoritos e autenticação
   const { isAuthenticated } = useAuth();
   const { favorites, toggleFavorite, isFavorite } = useFavorites();
-
+  const { addItem, toggleCart } = useCart(); // Adicionando hook do carrinho
+  
   useEffect(() => {
     const fetchSneaker = async () => {
       try {
@@ -35,10 +38,36 @@ const SneakerDetail = () => {
         const sneakerData = await getSneakerBySlug(slug);
 
         setSneaker(sneakerData);
-        setSelectedImage(
-          sneakerData.images.find((img) => img.isPrimary)?.url ||
-            sneakerData.images[0]?.url
-        );
+
+        // Usar a cor padrão retornada pela API (cor com estoque disponível)
+        if (sneakerData.defaultColor) {
+          setSelectedColor(sneakerData.defaultColor);
+
+          // Usar as imagens da cor padrão, se disponíveis
+          if (
+            sneakerData.currentColorImages &&
+            sneakerData.currentColorImages.length > 0
+          ) {
+            setColorImages(sneakerData.currentColorImages);
+            setSelectedImage(
+              sneakerData.currentColorImages.find((img) => img.isPrimary)
+                ?.url || sneakerData.currentColorImages[0]?.url
+            );
+          } else {
+            // Fallback para as imagens padrão
+            setSelectedImage(
+              sneakerData.images.find((img) => img.isPrimary)?.url ||
+                sneakerData.images[0]?.url
+            );
+          }
+        } else {
+          // Fallback para o comportamento anterior caso a API não retorne cor padrão
+          setSelectedImage(
+            sneakerData.images.find((img) => img.isPrimary)?.url ||
+              sneakerData.images[0]?.url
+          );
+        }
+
         setLoading(false);
       } catch (error) {
         console.error('Erro ao buscar detalhes do tênis:', error);
@@ -49,17 +78,62 @@ const SneakerDetail = () => {
     fetchSneaker();
   }, [slug]);
 
+  // Adicionar novo useEffect para carregar imagens específicas quando a cor mudar
   useEffect(() => {
-    // Selecionar uma cor padrão ao carregar o produto
-    if (sneaker && !selectedColor) {
-      const defaultColor = sneaker.colors.find((color) =>
-        sneaker.variants.some(
-          (variant) => variant.color === color && variant.stock > 0
-        )
-      );
-      setSelectedColor(defaultColor || null);
-    }
-  }, [sneaker]);
+    const loadColorImages = async () => {
+      if (!sneaker || !selectedColor) return;
+
+      try {
+        // Verificar primeiro se as imagens já estão no objeto do sneaker
+        const colorImageSet = sneaker.colorImages?.find(
+          (item) => item.color.toLowerCase() === selectedColor.toLowerCase()
+        );
+
+        if (colorImageSet && colorImageSet.images.length > 0) {
+          // Usar imagens já carregadas do objeto do tênis
+          setColorImages(colorImageSet.images);
+          setSelectedImage(
+            colorImageSet.images.find((img) => img.isPrimary)?.url ||
+              colorImageSet.images[0]?.url
+          );
+        } else {
+          // Caso contrário, buscar do servidor
+          const { getSneakerColorImages } = await import(
+            '@/services/sneakers.service'
+          );
+          const response = await getSneakerColorImages(
+            sneaker._id,
+            selectedColor
+          );
+
+          if (response.colorImages && response.colorImages.length > 0) {
+            setColorImages(response.colorImages);
+            setSelectedImage(
+              response.colorImages.find((img) => img.isPrimary)?.url ||
+                response.colorImages[0]?.url
+            );
+          } else {
+            // Voltar para imagens padrão se não houver específicas
+            setColorImages([]);
+            setSelectedImage(
+              sneaker.images.find((img) => img.isPrimary)?.url ||
+                sneaker.images[0]?.url
+            );
+          }
+        }
+      } catch (error) {
+        console.error('Erro ao carregar imagens da cor:', error);
+        // Em caso de erro, usar as imagens padrão
+        setColorImages([]);
+        setSelectedImage(
+          sneaker.images.find((img) => img.isPrimary)?.url ||
+            sneaker.images[0]?.url
+        );
+      }
+    };
+
+    loadColorImages();
+  }, [selectedColor, sneaker]);
 
   const handleImageChange = (imageUrl) => {
     setSelectedImage(imageUrl);
@@ -71,6 +145,7 @@ const SneakerDetail = () => {
 
   const handleColorSelect = (color) => {
     setSelectedColor(color);
+    // As imagens serão carregadas pelo useEffect acima
   };
 
   const handleQuantityChange = (e) => {
@@ -87,26 +162,51 @@ const SneakerDetail = () => {
       return;
     }
 
-    // Lógica para adicionar ao carrinho
-    console.log('Adicionado ao carrinho:', {
+    // Encontrar a variante correta para verificar estoque
+    const selectedVariant = sneaker.variants.find(
+      v => v.size === selectedSize && v.color === selectedColor
+    );
+
+    if (!selectedVariant || selectedVariant.stock < quantity) {
+      toast({
+        title: 'Quantidade indisponível em estoque',
+        description: `Máximo disponível: ${selectedVariant?.stock || 0} unidades.`,
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    // Preparar item para adicionar ao carrinho
+    const cartItem = {
       sneakerId: sneaker._id,
+      variantId: selectedVariant._id, // Importante para identificar a variante específica
       name: sneaker.name,
-      price: sneaker.finalPrice,
+      price: parseFloat(sneaker.finalPrice || sneaker.price),
+      originalPrice: sneaker.price,
       size: selectedSize,
       color: selectedColor,
       quantity: quantity,
-      image:
-        sneaker.images.find((img) => img.isPrimary)?.url ||
-        sneaker.images[0]?.url,
-    });
+      image: (colorImages.length > 0 && colorImages.find(img => img.isPrimary)?.url) || 
+             sneaker.images.find(img => img.isPrimary)?.url || 
+             sneaker.images[0]?.url,
+      brand: sneaker.brand,
+      slug: sneaker.slug
+    };
 
-    toast({
-      title: 'Tênis adicionado ao carrinho com sucesso!',
-      description: `Você adicionou ${quantity}x ${sneaker.name} (${selectedSize}, ${selectedColor}) ao carrinho.`,
-      variant: 'success',
-    });
+    // Adicionar ao carrinho usando o hook (funciona para usuários logados e não-logados)
+    addItem(cartItem);
+    
+    // Abrir o carrinho para mostrar o que foi adicionado (opcional)
+    setTimeout(() => toggleCart(), 300);
+    
+    // Se o usuário estiver autenticado, podemos fazer sincronização adicional com o backend
+    if (isAuthenticated) {
+      // Aqui poderia ser adicionada lógica para sincronizar com o carrinho do usuário no servidor
+      // Por exemplo, chamar uma API para salvar o carrinho no perfil do usuário
+      console.log('Usuário autenticado, sincronizando carrinho com o backend...');
+    }
   };
-
+  
   const handleToggleFavorite = async () => {
     if (!isAuthenticated) {
       toast({
@@ -162,23 +262,26 @@ const SneakerDetail = () => {
           <div className="flex flex-col md:flex-row gap-4">
             {/* Miniaturas laterais */}
             <div className="flex md:flex-col gap-2 order-2 md:order-1">
-              {sneaker.images.map((image, index) => (
-                <div
-                  key={index}
-                  onClick={() => handleImageChange(image.url)}
-                  className={`w-16 h-16 cursor-pointer border-2 rounded overflow-hidden ${
-                    selectedImage === image.url
-                      ? 'border-primary'
-                      : 'border-gray-200'
-                  }`}
-                >
-                  <img
-                    src={image.url}
-                    alt={image.alt || sneaker.name}
-                    className="w-full h-full object-cover"
-                  />
-                </div>
-              ))}
+              {/* Usar colorImages se disponíveis, caso contrário usar imagens padrão */}
+              {(colorImages.length > 0 ? colorImages : sneaker.images).map(
+                (image, index) => (
+                  <div
+                    key={index}
+                    onClick={() => handleImageChange(image.url)}
+                    className={`w-16 h-16 cursor-pointer border-2 rounded overflow-hidden ${
+                      selectedImage === image.url
+                        ? 'border-primary'
+                        : 'border-gray-200'
+                    }`}
+                  >
+                    <img
+                      src={image.url}
+                      alt={image.alt || sneaker.name}
+                      className="w-full h-full object-cover"
+                    />
+                  </div>
+                )
+              )}
             </div>
 
             {/* Imagem principal */}
@@ -434,18 +537,14 @@ const SneakerDetail = () => {
         </div>
 
         {/* Tênis relacionados com nosso novo componente */}
-        <div className="mt-12 border-t pt-6">
-          {sneaker.relatedSneakers && sneaker.relatedSneakers.length > 0 ? (
+        {sneaker.relatedSneakers && sneaker.relatedSneakers.length > 0 && (
+          <div className="mt-12 border-t pt-6">
             <CarouselSneakers
               sneakers={sneaker.relatedSneakers}
               title="Você também pode gostar"
             />
-          ) : (
-            <p className="text-gray-500 text-center py-8">
-              Não há tênis relacionados para este produto.
-            </p>
-          )}
-        </div>
+          </div>
+        )}
       </div>
     </LayoutBase>
   );

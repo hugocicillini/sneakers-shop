@@ -1,6 +1,6 @@
 import mongoose from 'mongoose';
 
-const addressesSchema = new mongoose.Schema(
+const addressSchema = new mongoose.Schema(
   {
     user: {
       type: mongoose.Schema.Types.ObjectId,
@@ -71,4 +71,29 @@ const addressesSchema = new mongoose.Schema(
   }
 );
 
-export const Addresses = mongoose.model('Addresses', addressesSchema);
+addressSchema.pre('save', async function (next) {
+  if (this.isDefault) {
+    // Desmarcar qualquer outro endereço padrão deste usuário
+    await this.constructor.updateMany(
+      { user: this.user, _id: { $ne: this._id } },
+      { $set: { isDefault: false } }
+    );
+
+    try {
+      // Atualizar o defaultAddress no modelo Client
+      // Usamos mongoose.model para evitar problemas de importação circular
+      const Client = mongoose.model('Client');
+      await Client.updateOne(
+        { _id: this.user, userType: 'client' },
+        { $set: { defaultAddress: this._id } }
+      );
+    } catch (error) {
+      // Se o modelo Client ainda não foi registrado ou outro erro ocorrer
+      // Apenas registre o erro, mas não interrompa a operação
+      console.log('Nota: Cliente não foi atualizado:', error.message);
+    }
+  }
+  next();
+});
+
+export const Address = mongoose.model('Address', addressSchema);

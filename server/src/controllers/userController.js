@@ -1,6 +1,6 @@
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
-import { Addresses } from '../models/addressesModel.js';
+import { Address } from '../models/addressModel.js';
 import { User } from '../models/userModel.js';
 
 // Registrar um novo usuário

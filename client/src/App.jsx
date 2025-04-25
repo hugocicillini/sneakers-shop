@@ -1,6 +1,7 @@
 import { BrowserRouter, Route, Routes } from 'react-router-dom';
 import ProtectedRoute from './components/ProtectedRoute';
 import { AuthProvider } from './contexts/AuthContext';
+import { CartProvider } from './contexts/CartContext';
 import { FavoritesProvider } from './contexts/FavoritesContext';
 import Account from './pages/Account'; // Página de conta do usuário
 import Home from './pages/Home';
@@ -12,26 +13,28 @@ function App() {
   return (
     <AuthProvider>
       <FavoritesProvider>
-        <BrowserRouter>
-          <Routes>
-            <Route path="/" element={<Home />} />
+        <CartProvider>
+          <BrowserRouter>
+            <Routes>
+              <Route path="/" element={<Home />} />
 
-            {/* Rotas públicas */}
-            <Route path="/login" element={<Login />} />
-            <Route path="/register" element={<Register />} />
+              {/* Rotas públicas */}
+              <Route path="/login" element={<Login />} />
+              <Route path="/register" element={<Register />} />
 
-            {/* Rotas protegidas (requerem autenticação) */}
-            <Route
-              path="/account"
-              element={
-                <ProtectedRoute>
-                  <Account />
-                </ProtectedRoute>
-              }
-            />
-            <Route path="/sneaker/:slug" element={<SneakerDetail />} />
-          </Routes>
-        </BrowserRouter>
+              {/* Rotas protegidas (requerem autenticação) */}
+              <Route
+                path="/account"
+                element={
+                  <ProtectedRoute>
+                    <Account />
+                  </ProtectedRoute>
+                }
+              />
+              <Route path="/sneaker/:slug" element={<SneakerDetail />} />
+            </Routes>
+          </BrowserRouter>
+        </CartProvider>
       </FavoritesProvider>
     </AuthProvider>
   );

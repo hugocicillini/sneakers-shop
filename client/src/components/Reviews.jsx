@@ -215,9 +215,6 @@ const Reviews = ({
           <p className="text-gray-500">
             Este produto ainda não possui avaliações.
           </p>
-          <button className="mt-4 px-6 py-2 bg-primary text-white rounded-md hover:bg-primary-dark transition-colors">
-            Seja o primeiro a avaliar
-          </button>
         </div>
       )}
 
