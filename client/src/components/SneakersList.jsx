@@ -1,4 +1,4 @@
-import { useFavorites } from '@/contexts/FavoritesContext';
+import { useFavorites } from '@/contexts/WishlistContext';
 import { Heart, ShoppingCart, Star } from 'lucide-react';
 import { useState } from 'react';
 import { Link } from 'react-router-dom';

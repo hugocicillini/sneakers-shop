@@ -2,7 +2,7 @@ import Reviews from '@/components/Reviews';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useAuth } from '@/contexts/AuthContext';
-import { useFavorites } from '@/contexts/FavoritesContext';
+import { useFavorites } from '@/contexts/WishlistContext';
 import { useCart } from '@/contexts/CartContext';
 import { toast } from '@/hooks/use-toast';
 import LayoutBase from '@/layout/LayoutBase';

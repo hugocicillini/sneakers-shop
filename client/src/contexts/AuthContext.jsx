@@ -24,46 +24,6 @@ export const AuthProvider = ({ children }) => {
     setLoading(false);
   }, []);
 
-  // Função atualizada para garantir que addresses sempre seja um array
-  const updateUserState = (userData, options = {}) => {
-    const { updateStorage = true, merge = false } = options;
-
-    // Garantir que userData existe
-    if (!userData) {
-      console.error('Tentativa de atualizar estado com userData indefinido');
-      return null;
-    }
-
-    // Criar uma cópia profunda dos dados para evitar modificações por referência
-    const userDataCopy = JSON.parse(JSON.stringify(userData));
-
-    // Garantir que addresses é sempre um array
-    if (!userDataCopy.addresses) {
-      userDataCopy.addresses = [];
-    }
-
-    // Criar o novo estado de usuário
-    const newUserData =
-      merge && user
-        ? { ...JSON.parse(JSON.stringify(user)), ...userDataCopy }
-        : userDataCopy;
-
-    // Verificar se o estado realmente mudou para evitar atualizações redundantes
-    if (user && JSON.stringify(user) === JSON.stringify(newUserData)) {
-      return user; // Retorna o estado atual sem alterar
-    }
-
-    // Atualizar o estado - usar uma função para garantir o estado mais recente
-    setUser(newUserData);
-
-    // Atualizar localStorage
-    if (updateStorage && newUserData) {
-      localStorage.setItem('user', JSON.stringify(newUserData));
-    }
-
-    return newUserData;
-  };
-
   // Função para realizar login
   const login = async (email, password) => {
     try {
@@ -135,7 +95,7 @@ export const AuthProvider = ({ children }) => {
   const logout = () => {
     localStorage.removeItem('user');
     localStorage.removeItem('token');
-    localStorage.removeItem('favorites')
+    localStorage.removeItem('favorites');
     setUser(null);
   };
 
@@ -145,7 +105,7 @@ export const AuthProvider = ({ children }) => {
   // Valores a serem fornecidos pelo contexto
   const value = {
     user,
-    updateUserState,
+    setUser,
     login,
     register,
     logout,

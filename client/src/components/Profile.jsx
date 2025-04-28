@@ -14,13 +14,12 @@ import { useAuth } from '@/contexts/AuthContext';
 import { Edit } from 'lucide-react';
 import { useState } from 'react';
 
-const ProfileDialog = ({ onUserUpdated }) => {
-  const { user, updateUserProfile } = useAuth();
+const ProfileDialog = ({ onUserUpdated, userData, setUserData }) => {
   const [open, setOpen] = useState(false);
   const [formData, setFormData] = useState({
-    name: user?.name || '',
-    email: user?.email || '',
-    phone: user?.phone || '',
+    name: userData?.name || '',
+    email: userData?.email || '',
+    phone: userData?.phone || '',
   });
   const [isLoading, setIsLoading] = useState(false);
 

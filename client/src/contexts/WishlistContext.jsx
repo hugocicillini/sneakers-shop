@@ -3,7 +3,7 @@ import {
   addFavorite,
   getUserFavorites,
   removeFavorite,
-} from '@/services/favorites.service';
+} from '@/services/wishlist.service';
 import { createContext, useContext, useEffect, useState } from 'react';
 import { useAuth } from './AuthContext';
 

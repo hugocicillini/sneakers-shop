@@ -1,66 +1,42 @@
 import { Address } from '../models/addressModel.js';
+import { Client } from '../models/clientModel.js';
 
-/**
- * Busca todos os endereços de um usuário
- */
 export const getUserAddresses = async (req, res) => {
   try {
-    const { userId } = req.params;
+    // Usar o ID do usuário do middleware de autenticação
+    const userId = req.user._id;
 
-    const addresses = await Addresses.findById(userId);
+    const addresses = await Address.find({ user: userId });
 
-    return res.status(200).json(addresses);
-  } catch (error) {
-    return res
-      .status(500)
-      .json({ message: 'Erro ao buscar endereços', error: error.message });
-  }
-};
-
-/**
- * Busca o endereço padrão de um usuário
- */
-export const getUserDefaultAddress = async (req, res) => {
-  try {
-    const { userId } = req.params;
-
-    const defaultAddress = await Addresses.findDefaultByUserId(userId);
-
-    if (!defaultAddress) {
-      return res
-        .status(404)
-        .json({ message: 'Endereço padrão não encontrado' });
-    }
-
-    return res.status(200).json(defaultAddress);
+    return res.status(200).json({
+      success: true,
+      addresses: addresses,
+    });
   } catch (error) {
     return res.status(500).json({
-      message: 'Erro ao buscar endereço padrão',
+      success: false,
+      message: 'Erro ao buscar endereços',
       error: error.message,
     });
   }
 };
 
-/**
- * Cria um novo endereço
- */
 export const createAddress = async (req, res) => {
   try {
     const requestData = req.body;
 
+    // Usar o ID do usuário do middleware de autenticação
+    const userId = req.user._id;
+
     // Extrair o objeto address que está aninhado na requisição
     const addressData = requestData.address || requestData;
 
-    // Verificar se o userId está sendo enviado em outro nível
-    const userId = requestData.userId || addressData.user;
-
-    const isFirstAddress = await Addresses.findOne({ user: userId });
+    const isFirstAddress = await Address.findOne({ user: userId });
 
     if (isFirstAddress === null) addressData.isDefault = true;
 
-    // Garantir que todos os campos estão sendo incluídos
     const newAddressData = {
-      user: userId, // Usar o userId extraído
+      user: userId, // Usar o ID do usuário autenticado
       type: addressData.type,
       isDefault: addressData.isDefault || false,
       recipient: addressData.recipient,
@@ -76,18 +52,24 @@ export const createAddress = async (req, res) => {
     };
 
     if (addressData.isDefault === true) {
-      // Se o novo endereço for padrão, remover o padrão dos outros endereços do usuário
-      await Addresses.updateMany(
+      await Address.updateMany(
         { user: userId, isDefault: true },
         { $set: { isDefault: false } }
       );
     }
 
-    const newAddress = new Addresses(newAddressData);
+    const newAddress = new Address(newAddressData);
     await newAddress.save();
 
+    // Se o endereço for padrão, atualizar o defaultAddress do cliente
+    if (newAddressData.isDefault) {
+      await Client.findByIdAndUpdate(userId, {
+        defaultAddress: newAddress._id,
+      });
+    }
+
     // Obter o documento completo após salvar
-    const savedAddress = await Addresses.findById(newAddress._id);
+    const savedAddress = await Address.findById(newAddress._id);
 
     // Converter para objeto simples para garantir serialização adequada
     const addressObject = savedAddress.toObject
@@ -108,16 +90,14 @@ export const createAddress = async (req, res) => {
   }
 };
 
-/**
- * Atualiza um endereço existente
- */
 export const updateAddress = async (req, res) => {
   try {
     const { id } = req.params;
     const addressData = req.body;
+    const userId = req.user._id; // Obter ID do usuário autenticado
 
     // Buscar o endereço atual para comparações
-    const currentAddress = await Addresses.findById(id);
+    const currentAddress = await Address.findById(id);
 
     if (!currentAddress) {
       return res.status(404).json({
@@ -126,10 +106,18 @@ export const updateAddress = async (req, res) => {
       });
     }
 
+    // Verificar se o endereço pertence ao usuário atual
+    if (currentAddress.user.toString() !== userId.toString()) {
+      return res.status(403).json({
+        success: false,
+        message: 'Você não tem permissão para editar este endereço',
+      });
+    }
+
     // Verificar se este é o único endereço padrão e está sendo alterado para não-padrão
     if (currentAddress.isDefault === true && addressData.isDefault === false) {
       // Contar quantos endereços padrão o usuário tem
-      const defaultCount = await Addresses.countDocuments({
+      const defaultCount = await Address.countDocuments({
         user: currentAddress.user,
         isDefault: true,
       });
@@ -144,29 +132,14 @@ export const updateAddress = async (req, res) => {
       }
     }
 
-    // Se o endereço está sendo definido como padrão, remover o padrão dos outros
-    if (addressData.isDefault === true) {
-      await Addresses.updateMany(
-        {
-          user: currentAddress.user,
-          _id: { $ne: id }, // Não incluir o endereço atual
-          isDefault: true,
-        },
-        { $set: { isDefault: false } }
-      );
-    }
-
-    // Agora podemos atualizar o endereço
-    const updatedAddressData = await Addresses.findByIdAndUpdate(
-      id,
-      addressData,
-      { new: true, runValidators: true }
-    );
+    // OPÇÃO 1: Usar save() em vez de findByIdAndUpdate para aproveitar o hook
+    Object.assign(currentAddress, addressData);
+    await currentAddress.save();
 
     // Converte para objeto simples para garantir serialização adequada
-    const addressObject = updatedAddressData.toObject
-      ? updatedAddressData.toObject()
-      : updatedAddressData;
+    const addressObject = currentAddress.toObject
+      ? currentAddress.toObject()
+      : currentAddress;
 
     return res.status(200).json({
       success: true,
@@ -182,15 +155,14 @@ export const updateAddress = async (req, res) => {
   }
 };
 
-/**
- * Remove um endereço
- */
 export const deleteAddress = async (req, res) => {
   try {
     const { id } = req.params;
+    console.log('ID do endereço a ser excluído:', id);
+    const userId = req.user._id; // Obter ID do usuário autenticado
 
     // Buscar o endereço antes de deletar
-    const addressToDelete = await Addresses.findById(id);
+    const addressToDelete = await Address.findById(id);
 
     if (!addressToDelete) {
       return res.status(404).json({
@@ -199,43 +171,61 @@ export const deleteAddress = async (req, res) => {
       });
     }
 
+    // Verificar se o endereço pertence ao usuário atual
+    if (addressToDelete.user.toString() !== userId.toString()) {
+      return res.status(403).json({
+        success: false,
+        message: 'Você não tem permissão para excluir este endereço',
+      });
+    }
+
     let newDefaultAddress = null;
-    
+
     if (addressToDelete.isDefault) {
-      const defaultCount = await Addresses.countDocuments({
+      const defaultCount = await Address.countDocuments({
         user: addressToDelete.user,
         isDefault: true,
       });
 
       if (defaultCount <= 1) {
-        const totalAddresses = await Addresses.countDocuments({
+        const totalAddresses = await Address.countDocuments({
           user: addressToDelete.user,
         });
 
         if (totalAddresses > 1) {
-          const anotherAddress = await Addresses.findOne({
+          const anotherAddress = await Address.findOne({
             user: addressToDelete.user,
             _id: { $ne: id },
           });
 
           if (anotherAddress) {
-            newDefaultAddress = await Addresses.findByIdAndUpdate(
+            newDefaultAddress = await Address.findByIdAndUpdate(
               anotherAddress._id,
               { isDefault: true },
               { new: true }
             );
+
+            // Atualizar o defaultAddress do cliente
+            await Client.findByIdAndUpdate(addressToDelete.user, {
+              defaultAddress: anotherAddress._id,
+            });
           }
+        } else {
+          // Se não houver outro endereço, definir defaultAddress como null
+          await Client.findByIdAndUpdate(addressToDelete.user, {
+            defaultAddress: null,
+          });
         }
       }
     }
 
     // Agora podemos excluir o endereço com segurança
-    const deletedAddress = await Addresses.findByIdAndDelete(id);
+    const deletedAddress = await Address.findByIdAndDelete(id);
 
     return res.status(200).json({
       success: true,
       message: 'Endereço removido com sucesso',
-      newDefaultAddress: newDefaultAddress ? newDefaultAddress : null
+      newDefaultAddress: newDefaultAddress ? newDefaultAddress : null,
     });
   } catch (error) {
     console.error('Erro ao remover endereço:', error);

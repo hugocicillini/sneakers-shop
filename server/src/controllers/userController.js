@@ -12,11 +12,10 @@ export const registerUser = async (req, res) => {
       return res.status(400).json({ message: 'Usuário já existe' });
     }
 
-    // Criar um novo cliente sem especificar userType
     const user = await Client.create({
       name,
       email,
-      password, // O plugin mongoose-bcrypt fará o hash automaticamente
+      password,
       phone,
     });
 
@@ -33,7 +32,6 @@ export const registerUser = async (req, res) => {
 
     res.status(201).json({
       token: token,
-      _id: user._id,
       name: user.name,
     });
   } catch (error) {
@@ -76,7 +74,6 @@ export const loginUser = async (req, res) => {
 
     res.status(200).json({
       token: token,
-      _id: user._id,
       name: user.name,
     });
   } catch (error) {
@@ -88,16 +85,22 @@ export const loginUser = async (req, res) => {
 
 export const getUser = async (req, res) => {
   try {
-    const { id } = req.params;
+    const userId = req.user._id;
 
-    const user = await User.findById(id).select('-password -__v');
-    if (!user) {
+    const baseUser = await User.findById(userId).select('-password -__v');
+    if (!baseUser) {
       return res.status(404).json({ message: 'Usuário não encontrado' });
     }
 
-    console.log(user);
+    if (baseUser.userType === 'Client') {
+      const clientUser = await Client.findById(userId)
+        .select('-password -__v')
+        .populate('defaultAddress');
 
-    res.status(200).json(user);
+      return res.status(200).json(clientUser);
+    }
+
+    res.status(200).json(baseUser);
   } catch (error) {
     res
       .status(500)
@@ -105,25 +108,17 @@ export const getUser = async (req, res) => {
   }
 };
 
-// Atualizar usuário
 export const updateUser = async (req, res) => {
   try {
-    const { id } = req.params;
-    const { name, email, password, phone, preferences } = req.body;
+    const { name, email, phone, preferences } = req.body;
 
-    const user = await User.findById(id);
+    const userId = req.user._id;
+
+    const user = await User.findById(userId);
     if (!user) {
       return res.status(404).json({ message: 'Usuário não encontrado' });
     }
 
-    // Atualizar campos básicos
-    if (password) {
-      // Substituir este código:
-      // const salt = await bcrypt.genSalt(10);
-      // user.password = await bcrypt.hash(password, salt);
-      // Por:
-      user.password = password; // Plugin fará o hash automaticamente
-    }
     user.name = name || user.name;
     user.email = email || user.email;
     user.phone = phone || user.phone;

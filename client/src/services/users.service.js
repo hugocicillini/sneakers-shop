@@ -43,7 +43,6 @@ export const registerUser = async (name, email, password) => {
           name, 
           email, 
           password,
-          // Não enviar userType aqui - isso será tratado pelo backend
         }),
       }
     );
@@ -67,10 +66,17 @@ export const registerUser = async (name, email, password) => {
   }
 };
 
-export const getUserById = async (userId) => {
+export const getUser = async () => {
   try {
     const response = await fetch(
-      `${import.meta.env.VITE_API_URL}/api/users/${userId}`
+      `${import.meta.env.VITE_API_URL}/api/users`,
+      {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${localStorage.getItem('token')}`,
+        },
+      }
     );
 
     if (!response.ok) {
@@ -85,14 +91,15 @@ export const getUserById = async (userId) => {
   }
 };
 
-export const updateUser = async (userId, userData) => {
+export const updateUser = async (userData) => {
   try {
     const response = await fetch(
-      `${import.meta.env.VITE_API_URL}/api/users/${userId}`,
+      `${import.meta.env.VITE_API_URL}/api/users`,
       {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
+          Authorization: `Bearer ${localStorage.getItem('token')}`,
         },
         body: JSON.stringify(userData),
       }

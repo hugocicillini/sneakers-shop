@@ -1,6 +1,6 @@
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/contexts/AuthContext';
-import { useFavorites } from '@/contexts/FavoritesContext';
+import { useFavorites } from '@/contexts/WishlistContext';
 import {
   CircleUserRound,
   Heart,

@@ -83,8 +83,10 @@ addressSchema.pre('save', async function (next) {
       // Atualizar o defaultAddress no modelo Client
       // Usamos mongoose.model para evitar problemas de importação circular
       const Client = mongoose.model('Client');
+
+      // Remover o filtro userType, pois já está implícito pelo modelo Client
       await Client.updateOne(
-        { _id: this.user, userType: 'client' },
+        { _id: this.user },
         { $set: { defaultAddress: this._id } }
       );
     } catch (error) {

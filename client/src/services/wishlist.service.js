@@ -1,6 +1,6 @@
 export const getUserFavorites = async () => {
   try {
-    const response = await fetch(`${import.meta.env.VITE_API_URL}/favorites`, {
+    const response = await fetch(`${import.meta.env.VITE_API_URL}/api/wishlist`, {
       method: 'GET',
       headers: {
         'Content-Type': 'application/json',
@@ -18,7 +18,7 @@ export const getUserFavorites = async () => {
 
 export const addFavorite = async (sneakerId) => {
   try {
-    const response = await fetch(`${import.meta.env.VITE_API_URL}/favorites`, {
+    const response = await fetch(`${import.meta.env.VITE_API_URL}/api/wishlist`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -38,7 +38,7 @@ export const addFavorite = async (sneakerId) => {
 export const removeFavorite = async (sneakerId) => {
   try {
     const response = await fetch(
-      `${import.meta.env.VITE_API_URL}/favorites/${sneakerId}`,
+      `${import.meta.env.VITE_API_URL}/api/wishlist/${sneakerId}`,
       {
         method: 'DELETE',
         headers: {

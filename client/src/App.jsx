@@ -2,7 +2,7 @@ import { BrowserRouter, Route, Routes } from 'react-router-dom';
 import ProtectedRoute from './components/ProtectedRoute';
 import { AuthProvider } from './contexts/AuthContext';
 import { CartProvider } from './contexts/CartContext';
-import { FavoritesProvider } from './contexts/FavoritesContext';
+import { FavoritesProvider } from './contexts/WishlistContext';
 import Account from './pages/Account'; // Página de conta do usuário
 import Home from './pages/Home';
 import Login from './pages/Login';

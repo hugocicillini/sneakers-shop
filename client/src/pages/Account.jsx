@@ -12,16 +12,17 @@ import { useAuth } from '@/contexts/AuthContext';
 import { toast } from '@/hooks/use-toast';
 import LayoutBase from '@/layout/LayoutBase';
 import {
-  addUserAddress,
+  createAddress,
   deleteUserAddress,
+  getUserAddresses,
   updateUserAddress,
 } from '@/services/addresses.service';
-import { getUserById, updateUser } from '@/services/users.service';
+import { getUser, updateUser } from '@/services/users.service';
 import { ChevronDown, ChevronUp, Loader2, Package } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
 const Account = () => {
-  const { user, updateUserState } = useAuth();
+  const { user, setUser } = useAuth();
   const [expandedOrders, setExpandedOrders] = useState({});
   const [orders, setOrders] = useState([
     {
@@ -70,56 +71,46 @@ const Account = () => {
     },
   ]);
   const [loading, setLoading] = useState(true);
-
-  // Função para carregar todos os dados do usuário
-  const getUserData = async () => {
-    try {
-      setLoading(true);
-      // Se não temos um ID de usuário, não podemos carregar os dados
-      if (!user?._id) {
-        setLoading(false);
-        return;
-      }
-
-      const response = await getUserById(user._id);
-
-      if (response.success) {
-        // Atualiza o estado do usuário com todos os dados recebidos
-        updateUserState(response.user, { merge: true });
-
-        // Se houver pedidos no response, atualize-os também
-        if (response.user.orders) {
-          setOrders(response.user.orders);
-        }
-      } else {
-        toast({
-          title: 'Erro ao carregar dados',
-          description:
-            'Não foi possível carregar seus dados. Por favor, tente novamente.',
-          variant: 'destructive',
-        });
-      }
-    } catch (error) {
-      console.error('Erro ao obter dados do usuário:', error);
-      toast({
-        title: 'Erro ao carregar dados',
-        description:
-          'Ocorreu um erro ao carregar seus dados. Por favor, tente novamente.',
-        variant: 'destructive',
-      });
-    } finally {
-      setLoading(false);
-    }
-  };
+  const [userData, setUserData] = useState(null);
+  const [addresses, setAddresses] = useState([]);
 
   useEffect(() => {
-    getUserData();
-  }, [user._id]); // Executar quando o ID do usuário mudar
+    const fetchUserData = async () => {
+      setLoading(true);
+      try {
+        const [userResponse, addressResponse] = await Promise.all([
+          getUser(),
+          getUserAddresses(),
+        ]);
+
+        if (userResponse.success && userResponse.user) {
+          setUserData(userResponse.user);
+        } else {
+          console.error('Erro ao obter dados do usuário:', userResponse);
+        }
+
+        if (addressResponse.success) {
+          setAddresses(addressResponse.addresses || []);
+        } else {
+          console.error('Erro ao buscar endereços:', addressResponse.message);
+          setAddresses([]);
+        }
+      } catch (error) {
+        console.error('Erro ao buscar dados:', error);
+        setAddresses([]);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    if (user) {
+      fetchUserData();
+    }
+  }, [user]);
 
   const handleUserUpdated = async (updatedUserData) => {
     try {
-      // Chamar diretamente o serviço de atualização
-      const response = await updateUser(user._id, updatedUserData);
+      const response = await updateUser(updatedUserData);
 
       if (!response.success) {
         toast({
@@ -129,16 +120,14 @@ const Account = () => {
           variant: 'destructive',
         });
       } else {
-        // Garantir que os endereços existentes são preservados
-        // Criar um novo objeto de usuário combinando os dados da resposta com os endereços existentes
-        const updatedUserWithAddresses = {
-          ...response.user,
-          // Preservar explicitamente os endereços existentes se não estiverem na resposta
-          addresses: response.user.addresses || user.addresses,
-        };
+        // Atualizar apenas os dados básicos do usuário
+        setUserData(response.user);
 
-        // Atualizar o estado do usuário usando updateUserState com o objeto completo
-        updateUserState(updatedUserWithAddresses, { merge: false });
+        // Atualizar o estado global do usuário
+        setUser((prevUser) => ({
+          ...prevUser,
+          ...response.user,
+        }));
 
         toast({
           title: 'Perfil atualizado',
@@ -150,81 +139,68 @@ const Account = () => {
     }
   };
 
-  const handleAddressUpdated = async (addressId, updatedAddress, isEditing) => {
+  const handleAddressUpdated = async (addressId, addressData, isEditing) => {
     try {
-      let response;
-
+      // Editar endereço existente
       if (isEditing) {
-        // Atualizar endereço existente chamando diretamente o serviço
-        response = await updateUserAddress(addressId, updatedAddress);
+        const response = await updateUserAddress(addressId, addressData);
 
         if (!response.success) {
           toast({
             title: 'Erro ao atualizar endereço',
-            description:
-              response.message || 'Não foi possível atualizar o endereço.',
+            description: response.message || 'Falha ao atualizar endereço.',
             variant: 'destructive',
           });
           return;
         }
 
-        // Criar um novo objeto de usuário
-        const updatedUser = { ...user };
-
-        // Atualizar o endereço específico no array
-        updatedUser.addresses = updatedUser.addresses.map((addr) => {
-          // Se este é o endereço sendo editado
-          if (addr._id === addressId) {
-            return response.address;
-          }
-          // Se este NÃO é o endereço sendo editado, mas o novo endereço é marcado como padrão
-          // e o endereço atual também é padrão, desmarcamos este
-          if (updatedAddress.isDefault && addr.isDefault) {
-            return { ...addr, isDefault: false };
-          }
-          // Caso contrário, manter o endereço como está
-          return addr;
-        });
-
-        // Uma única atualização do estado do usuário
-        updateUserState(updatedUser);
+        // Recarregar endereços do backend para garantir consistência
+        const refreshResponse = await getUserAddresses();
+        if (refreshResponse.success) {
+          setAddresses(refreshResponse.addresses || []);
+        }
 
         toast({
           title: 'Endereço atualizado',
-          description: 'Seu endereço foi atualizado com sucesso!',
+          description: 'Endereço atualizado com sucesso!',
           variant: 'success',
         });
-      } else {
-        // Adicionar novo endereço chamando diretamente o serviço
-        response = await addUserAddress(user._id, updatedAddress);
+      }
+      // Adicionar novo endereço
+      else {
+        const response = await createAddress(addressData);
 
         if (!response.success) {
           toast({
             title: 'Erro ao adicionar endereço',
-            description:
-              response.message || 'Não foi possível adicionar o endereço.',
+            description: response.message || 'Falha ao adicionar endereço.',
             variant: 'destructive',
           });
           return;
         }
 
-        // Atualizar o estado global com o novo endereço
-        const updatedUser = { ...user };
-        updatedUser.addresses = [...updatedUser.addresses, response.address];
-
-        // Atualizar o estado do usuário com updateUserState
-        updateUserState(updatedUser);
+        // Recarregar endereços do backend para garantir consistência
+        const refreshResponse = await getUserAddresses();
+        if (refreshResponse.success) {
+          setAddresses(refreshResponse.addresses || []);
+        }
 
         toast({
           title: 'Endereço adicionado',
-          description: 'Seu novo endereço foi adicionado com sucesso!',
+          description: 'Endereço adicionado com sucesso!',
           variant: 'success',
         });
       }
+
+      // Atualizar os dados do usuário para refletir possíveis mudanças no endereço padrão
+      const userResponse = await getUser();
+      if (userResponse.success && userResponse.user) {
+        setUserData(userResponse.user);
+      }
     } catch (error) {
-      console.error('Erro ao processar endereço:', error);
+      console.error('Erro:', error);
       toast({
-        title: 'Erro inesperado',
+        title: 'Erro',
         description: 'Ocorreu um erro ao processar sua solicitação.',
         variant: 'destructive',
       });
@@ -245,25 +221,23 @@ const Account = () => {
         return;
       }
 
-      // Atualizar o estado do usuário removendo o endereço excluído
-      const updatedUser = { ...user };
+      // Atualizar apenas o estado local de endereços
+      setAddresses((prevAddresses) => {
+        // Filtrar o endereço excluído
+        let filteredAddresses = prevAddresses.filter(
+          (addr) => addr._id !== addressId
+        );
 
-      // Filtrar o endereço excluído
-      updatedUser.addresses = updatedUser.addresses.filter(
-        (addr) => addr._id !== addressId
-      );
+        // Se um novo endereço padrão foi definido, atualize os estados dos endereços
+        if (response.newDefaultAddress) {
+          filteredAddresses = filteredAddresses.map((addr) => ({
+            ...addr,
+            isDefault: addr._id === response.newDefaultAddress._id,
+          }));
+        }
 
-      // Se um novo endereço padrão foi definido, atualize os estados dos endereços
-      if (response.newDefaultAddress) {
-        // Atualizar o estado isDefault para o novo endereço padrão
-        updatedUser.addresses = updatedUser.addresses.map((addr) => ({
-          ...addr,
-          isDefault: addr._id === response.newDefaultAddress._id,
-        }));
-      }
-
-      // Atualizar o estado do usuário
-      updateUserState(updatedUser);
+        return filteredAddresses;
+      });
 
       toast({
         title: 'Endereço excluído',
@@ -307,24 +281,28 @@ const Account = () => {
                 <CardHeader>
                   <CardTitle className="flex justify-between items-center">
                     <span>Dados Pessoais</span>
-                    <ProfileDialog onUserUpdated={handleUserUpdated} />
+                    <ProfileDialog
+                      onUserUpdated={handleUserUpdated}
+                      userData={userData}
+                      setUserData={setUserData}
+                    />
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-3">
                     <div>
                       <p className="text-sm font-medium text-gray-500">Nome</p>
-                      <p>{user?.name || 'Nome do usuário'}</p>
+                      <p>{userData?.name || 'Nome do usuário'}</p>
                     </div>
                     <div>
                       <p className="text-sm font-medium text-gray-500">Email</p>
-                      <p>{user?.email || 'email@exemplo.com'}</p>
+                      <p>{userData?.email || 'email@exemplo.com'}</p>
                     </div>
                     <div>
                       <p className="text-sm font-medium text-gray-500">
                         Telefone
                       </p>
-                      <p>{user?.phone || '(11) 99999-9999'}</p>
+                      <p>{userData?.phone || '(11) 99999-9999'}</p>
                     </div>
                   </div>
                 </CardContent>
@@ -339,10 +317,10 @@ const Account = () => {
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
-                  {user.addresses && user.addresses.length > 0 ? (
+                  {addresses && addresses.length > 0 ? (
                     <div className="space-y-4 pt-2 overflow-y-auto max-h-96">
                       {/* Ordenar endereços para colocar o padrão primeiro */}
-                      {user.addresses
+                      {addresses
                         .sort(
                           (a, b) =>
                             (b.isDefault === true) - (a.isDefault === true)
