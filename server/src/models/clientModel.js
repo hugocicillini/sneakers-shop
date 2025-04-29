@@ -1,5 +1,6 @@
 import mongoose from 'mongoose';
 import { User } from './userModel.js';
+// Importar o modelo Wishlist para garantir que esteja registrado
 
 // Schema específico para clientes
 const ClientSchema = new mongoose.Schema({
@@ -7,10 +8,11 @@ const ClientSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Address',
   },
+  // Alterando para um array de IDs de Sneaker
   wishlist: [
     {
       type: mongoose.Schema.Types.ObjectId,
-      ref: 'Sneaker',
+      ref: 'Sneaker', // Referência ao modelo Sneaker, não Wishlist
     },
   ],
   preferences: {

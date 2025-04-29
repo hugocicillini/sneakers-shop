@@ -17,209 +17,191 @@ const Reviews = ({
   totalReviews = 0,
   averageRating = 0,
 }) => {
-  const [sortOrder, setSortOrder] = useState('recent');
+  // Estado para o diálogo e paginação
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [sortOrder, setSortOrder] = useState('recent');
   const [displayedReviews, setDisplayedReviews] = useState([]);
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(false);
   const [hasMore, setHasMore] = useState(true);
-  const observerRef = useRef(null);
-  const itemsPerPage = 10;
   const [shouldFetch, setShouldFetch] = useState(false);
 
-  // Executar fetch apenas quando shouldFetch for true
+  // Referência para o observador do scroll infinito
+  const observerRef = useRef(null);
+
+  // Configurações
+  const itemsPerPage = 10;
+
+  // Indicador se há mais reviews para mostrar além das iniciais
+  const hasMoreReviews = totalReviews > initialReviews.length;
+
+  // Carregar mais avaliações quando necessário
   useEffect(() => {
     const loadMoreReviews = async () => {
-      if (shouldFetch && dialogOpen && hasMore && !loading) {
-        try {
-          setLoading(true);
-          const response = await getSneakerReviews(sneakerId, {
-            page,
-            limit: itemsPerPage,
-            sort: sortOrder,
-          });
+      if (!shouldFetch || !dialogOpen || !hasMore || loading) return;
 
-          const newReviews = response.data || [];
+      try {
+        setLoading(true);
+        const response = await getSneakerReviews(sneakerId, {
+          page,
+          limit: itemsPerPage,
+          sort: sortOrder,
+        });
 
-          if (newReviews.length === 0 || newReviews.length < itemsPerPage) {
-            setHasMore(false);
-          }
+        const newReviews = response.data || [];
 
-          setDisplayedReviews((prev) =>
-            page === 1 ? newReviews : [...prev, ...newReviews]
-          );
-        } catch (error) {
-          console.error('Erro ao carregar avaliações:', error);
-          setHasMore(false);
-        } finally {
-          setLoading(false);
-          setShouldFetch(false); // Reset após o fetch
-        }
+        // Verificar se há mais páginas
+        setHasMore(newReviews.length === itemsPerPage);
+
+        // Atualizar lista de reviews
+        setDisplayedReviews((prev) =>
+          page === 1 ? newReviews : [...prev, ...newReviews]
+        );
+      } catch (error) {
+        console.error('Erro ao carregar avaliações:', error);
+        setHasMore(false);
+      } finally {
+        setLoading(false);
+        setShouldFetch(false);
       }
     };
 
     loadMoreReviews();
   }, [shouldFetch, dialogOpen, sneakerId, page, sortOrder, hasMore, loading]);
 
-  // Configurar o observador para infinite scroll
+  // Configurar observador para o scroll infinito
   useEffect(() => {
-    if (dialogOpen) {
-      const observer = new IntersectionObserver(
-        (entries) => {
-          const [entry] = entries;
-          if (entry.isIntersecting && hasMore && !loading) {
-            setPage((prev) => prev + 1);
-            setShouldFetch(true); // Aciona o fetch
-          }
-        },
-        { threshold: 0.5 }
-      );
+    if (!dialogOpen || !observerRef.current) return;
 
-      if (observerRef.current) {
-        observer.observe(observerRef.current);
-      }
-
-      return () => {
-        if (observerRef.current) {
-          observer.unobserve(observerRef.current);
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting && hasMore && !loading) {
+          setPage((prev) => prev + 1);
+          setShouldFetch(true);
         }
-      };
-    }
+      },
+      { threshold: 0.5 }
+    );
+
+    observer.observe(observerRef.current);
+    return () => observer.disconnect();
   }, [dialogOpen, hasMore, loading]);
 
-  // Calcular percentual de cada classificação - lógica simplificada
+  // Calcular percentuais de avaliação por estrela
   const getRatingPercentage = (star) => {
-    if (!initialReviews || initialReviews.length === 0) return 0;
-    
-    // Contar manualmente quantas reviews têm exatamente este número de estrelas
-    let count = 0;
-    for (const review of initialReviews) {
-      if (Number(review.rating) === star) {
-        count++;
-      }
-    }
-    
-    const percentage = (count / initialReviews.length) * 100;
-    return Math.round(percentage);
+    if (!initialReviews.length) return 0;
+
+    const count = initialReviews.filter(
+      (review) => Number(review.rating) === star
+    ).length;
+    return Math.round((count / initialReviews.length) * 100);
   };
 
-  // Reset quando o diálogo é fechado ou ordenação muda
-  const handleCloseDialog = () => {
-    setDialogOpen(false);
-    resetDialogState();
-  };
-
-  const handleSortChange = (newSort) => {
-    setSortOrder(newSort);
-    resetDialogState();
-    setShouldFetch(true); // Aciona o fetch para a nova ordenação
-  };
-
-  const resetDialogState = () => {
+  // Abrir o diálogo de todas as avaliações
+  const openAllReviews = () => {
     setPage(1);
     setDisplayedReviews([]);
     setHasMore(true);
-  };
-
-  // Quando abrir o dialog, resetar estado e começar carregamento
-  const handleOpenDialog = () => {
-    resetDialogState();
     setDialogOpen(true);
-    setShouldFetch(true); // Aciona o fetch inicial
+    setShouldFetch(true);
   };
 
-  return (
-    <div className="py-6">
-      {initialReviews.length > 0 ? (
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-          {/* Coluna 1: Resumo das avaliações */}
-          <div className="bg-gray-50 p-4 max-h-fit rounded-lg">
-            <div className="text-center mb-4">
-              <div className="text-4xl font-bold text-primary">
-                {averageRating.toFixed(1)}
-              </div>
-              <div className="flex justify-center my-2">
-                {[...Array(5)].map((_, i) => (
-                  <StarFilledIcon
-                    key={i}
-                    className={`h-5 w-5 ${
-                      i < Math.round(averageRating)
-                        ? 'text-yellow-400'
-                        : 'text-gray-300'
-                    }`}
-                  />
-                ))}
-              </div>
-              <div className="text-sm text-gray-500">
-                {totalReviews} avaliações
-              </div>
-            </div>
-
-            {/* Barras de avaliação */}
-            <div className="space-y-2">
-              {[5, 4, 3, 2, 1].map((star) => (
-                <div key={star} className="flex items-center">
-                  <div className="w-16 flex">
-                    {[...Array(5)].map((_, i) => (
-                      <StarFilledIcon
-                        key={i}
-                        className={`h-4 w-4 ${
-                          i < star ? 'text-yellow-400' : 'text-gray-300'
-                        }`}
-                      />
-                    ))}
-                  </div>
-                  <div className="flex-grow h-2 mx-2 bg-gray-200 rounded-full overflow-hidden">
-                    <div
-                      className="h-full bg-yellow-400 rounded-full"
-                      style={{ width: `${getRatingPercentage(star)}%` }}
-                    ></div>
-                  </div>
-                  <div className="w-10 text-xs text-gray-500">
-                    {getRatingPercentage(star)}%
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Coluna 2-3: Lista de avaliações */}
-          <div className="md:col-span-2">
-            {/* Filtros */}
-            <div className="flex justify-between mb-4">
-              <div className="font-medium">Avaliações recentes</div>
-            </div>
-
-            {/* Lista de avaliações (limitada aos iniciais) */}
-            <div className="space-y-6">
-              {initialReviews.map((review) => (
-                <ReviewItem key={review._id} review={review} />
-              ))}
-            </div>
-
-            {/* Botão Ver Todas as Avaliações */}
-            {totalReviews > initialReviews.length && (
-              <div className="mt-6 flex justify-center">
-                <button
-                  className="px-6 py-2 border border-primary text-primary rounded-md hover:bg-primary/5 transition-colors"
-                  onClick={handleOpenDialog}
-                >
-                  Ver todas as avaliações
-                </button>
-              </div>
-            )}
-          </div>
-        </div>
-      ) : (
+  // Se não há reviews, mostrar mensagem
+  if (!initialReviews.length) {
+    return (
+      <div className="py-6">
         <div className="text-center py-10 bg-gray-50 rounded-lg">
           <p className="text-gray-500">
             Este produto ainda não possui avaliações.
           </p>
         </div>
-      )}
+      </div>
+    );
+  }
 
-      {/* Dialog para mostrar todas as avaliações */}
-      <Dialog open={dialogOpen} onOpenChange={handleCloseDialog}>
+  return (
+    <div className="py-6">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+        {/* Resumo das avaliações */}
+        <div className="bg-gray-50 p-4 max-h-fit rounded-lg">
+          <div className="text-center mb-4">
+            <div className="text-4xl font-bold text-primary">
+              {averageRating.toFixed(1)}
+            </div>
+            <div className="flex justify-center my-2">
+              {[...Array(5)].map((_, i) => (
+                <StarFilledIcon
+                  key={i}
+                  className={`h-5 w-5 ${
+                    i < Math.round(averageRating)
+                      ? 'text-yellow-400'
+                      : 'text-gray-300'
+                  }`}
+                />
+              ))}
+            </div>
+            <div className="text-sm text-gray-500">
+              {totalReviews} {totalReviews === 1 ? 'avaliação' : 'avaliações'}
+            </div>
+          </div>
+
+          {/* Barras de avaliação */}
+          <div className="space-y-2">
+            {[5, 4, 3, 2, 1].map((star) => (
+              <div key={star} className="flex items-center">
+                <div className="w-16 flex">
+                  {[...Array(5)].map((_, i) => (
+                    <StarFilledIcon
+                      key={i}
+                      className={`h-4 w-4 ${
+                        i < star ? 'text-yellow-400' : 'text-gray-300'
+                      }`}
+                    />
+                  ))}
+                </div>
+                <div className="flex-grow h-2 mx-2 bg-gray-200 rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-yellow-400 rounded-full"
+                    style={{ width: `${getRatingPercentage(star)}%` }}
+                  ></div>
+                </div>
+                <div className="w-10 text-xs text-gray-500">
+                  {getRatingPercentage(star)}%
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Lista de avaliações */}
+        <div className="md:col-span-2">
+          <div className="flex justify-between mb-4">
+            <div className="font-medium">Avaliações recentes</div>
+          </div>
+
+          {/* Reviews iniciais */}
+          <div className="space-y-6">
+            {initialReviews.map((review) => (
+              <ReviewItem key={review._id} review={review} />
+            ))}
+          </div>
+
+          {/* Botão "Ver todas" - só aparece se há mais reviews */}
+          {hasMoreReviews && (
+            <div className="mt-6 flex justify-center">
+              <button
+                className="px-6 py-2 border border-primary text-primary rounded-md hover:bg-primary/5 transition-colors"
+                onClick={openAllReviews}
+              >
+                Ver todas as {totalReviews} avaliações
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Diálogo para mostrar todas as avaliações */}
+      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="sm:max-w-[600px] max-h-[80vh]">
           <DialogHeader>
             <DialogTitle>Todas as avaliações</DialogTitle>
@@ -227,7 +209,13 @@ const Reviews = ({
           <div className="flex justify-end mb-4">
             <select
               value={sortOrder}
-              onChange={(e) => handleSortChange(e.target.value)}
+              onChange={(e) => {
+                setSortOrder(e.target.value);
+                setPage(1);
+                setDisplayedReviews([]);
+                setHasMore(true);
+                setShouldFetch(true);
+              }}
               className="border px-2 py-1 rounded text-sm"
             >
               <option value="recent">Mais recentes</option>
@@ -245,7 +233,7 @@ const Reviews = ({
               ))}
             </div>
 
-            {/* Elemento observador para implementar o infinite scroll */}
+            {/* Indicador de carregamento para scroll infinito */}
             {hasMore && (
               <div
                 ref={observerRef}
@@ -267,7 +255,7 @@ const Reviews = ({
   );
 };
 
-// Componente para exibir um item de avaliação (evita duplicação de código)
+// Componente de item de avaliação
 const ReviewItem = ({ review }) => {
   return (
     <div className="border-b pb-4">

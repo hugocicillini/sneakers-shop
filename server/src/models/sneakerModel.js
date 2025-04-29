@@ -30,6 +30,11 @@ const sneakerSchema = new mongoose.Schema(
       min: 0,
       max: 100,
     },
+    // Preço final (calculado automaticamente)
+    finalPrice: {
+      type: Number,
+      min: 0,
+    },
     // Imagens gerais do produto
     coverImage: {
       url: {
@@ -182,7 +187,30 @@ sneakerSchema.virtual('reviews', {
   foreignField: 'sneaker',
 });
 
-// Pre-save hook para gerar slug automaticamente
+// Adicionar um middleware de validação para calcular baseDiscount quando finalPrice é fornecido
+sneakerSchema.pre('validate', function (next) {
+  // Se o finalPrice foi definido/modificado mas o baseDiscount não foi modificado
+  if (
+    this.isModified('finalPrice') &&
+    !this.isModified('baseDiscount') &&
+    this.finalPrice !== undefined &&
+    this.basePrice
+  ) {
+    // Se o finalPrice é maior ou igual ao basePrice, não há desconto
+    if (this.finalPrice >= this.basePrice) {
+      this.baseDiscount = 0;
+    } else {
+      // Calcular o desconto baseado no preço final fornecido
+      const discountPercentage =
+        ((this.basePrice - this.finalPrice) / this.basePrice) * 100;
+      this.baseDiscount = parseFloat(discountPercentage.toFixed(2));
+    }
+  }
+
+  next();
+});
+
+// Pre-save hook para gerar slug, SKU, calcular finalPrice, etc.
 sneakerSchema.pre('save', function (next) {
   if (!this.slug || this.isModified('name')) {
     this.slug = this.name
@@ -228,6 +256,28 @@ sneakerSchema.pre('save', function (next) {
   next();
 });
 
+// Método para definir o preço final diretamente (para API/uso programático)
+// Nota: Para uso normal, basta definir sneaker.finalPrice e salvar o documento
+sneakerSchema.methods.setFinalPrice = function (finalPrice) {
+  if (
+    !finalPrice ||
+    finalPrice <= 0 ||
+    !this.basePrice ||
+    this.basePrice <= 0
+  ) {
+    return false;
+  }
+
+  this.finalPrice = parseFloat(finalPrice.toFixed(2));
+  // O desconto será calculado automaticamente pelo middleware pre('validate')
+  return true;
+};
+
+// Método para obter a porcentagem de desconto (este ainda é útil)
+sneakerSchema.methods.getDiscountPercentage = function () {
+  return this.baseDiscount || 0;
+};
+
 sneakerSchema.methods.getDefaultColor = function () {
   if (this.defaultColor) return this.defaultColor;
 
@@ -239,7 +289,29 @@ sneakerSchema.methods.getDefaultColor = function () {
 
 // Método para calcular o rating médio com base nas reviews
 sneakerSchema.methods.calculateAverageRating = async function () {
-  // ...código existente...
+  const Review = mongoose.model('Review');
+
+  // Buscar todas as reviews aprovadas para este tênis
+  const reviews = await Review.find({
+    sneaker: this._id,
+    isApproved: true,
+  });
+
+  // Atualizar o contador de reviews
+  this.reviewCount = reviews.length;
+
+  // Calcular a média das notas
+  if (reviews.length > 0) {
+    const totalRating = reviews.reduce((sum, review) => sum + review.rating, 0);
+    this.rating = parseFloat((totalRating / reviews.length).toFixed(1));
+  } else {
+    this.rating = 0;
+  }
+
+  // Salvar as alterações
+  await this.save();
+
+  return this.rating;
 };
 
 // Método para obter imagens de uma cor específica

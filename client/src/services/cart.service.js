@@ -1,250 +1,158 @@
-// Serviço para manipulação do carrinho de compras
-// Implementa chamadas à API e usa localStorage como fallback
+// Serviço para manipulação do carrinho de compras - Versão simplificada
 
-// Helper para verificar se o usuário está autenticado
-const isAuthenticated = () => {
-  return !!localStorage.getItem('token');
+// Helpers básicos
+const isAuthenticated = () => !!localStorage.getItem('token');
+
+const getAuthHeaders = () => ({
+  'Content-Type': 'application/json',
+  ...(localStorage.getItem('token')
+    ? { Authorization: `Bearer ${localStorage.getItem('token')}` }
+    : {}),
+});
+
+const getCartFromLocalStorage = () => {
+  const savedCart = localStorage.getItem('cart');
+  return savedCart ? JSON.parse(savedCart) : { items: [] };
 };
 
-// Helper para obter os headers com autenticação
-const getAuthHeaders = () => {
-  const token = localStorage.getItem('token');
-  
-  return {
-    'Content-Type': 'application/json',
-    ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
-  };
+const saveCartToLocalStorage = (cart) => {
+  localStorage.setItem('cart', JSON.stringify(cart));
 };
 
-// Helper para verificar e processar respostas da API
-const processApiResponse = async (response) => {
-  // Verificar se a resposta é JSON antes de tentar processá-la
-  const contentType = response.headers.get('content-type');
-  if (contentType && contentType.includes('application/json')) {
-    return await response.json();
-  } else {
-    // Se não for JSON, obter o texto para informações de depuração
-    const text = await response.text();
-    console.error('Resposta não-JSON recebida:', text);
-    throw new Error('Resposta inválida do servidor');
-  }
-};
-
+// Buscar carrinho (do servidor se autenticado, ou do localStorage)
 export const getCart = async () => {
   try {
-    if (isAuthenticated()) {
-      // Buscar carrinho do servidor para usuários autenticados
-      const response = await fetch(`${import.meta.env.VITE_API_URL}/cart`, {
-        method: 'GET',
-        headers: getAuthHeaders()
-        // Removido credentials: 'include'
-      });
-
-      if (!response.ok) {
-        if (response.status === 401) {
-          // Se não autorizado, poderia tentar renovar o token ou fazer logout
-          console.error('Usuário não autorizado. Verifique a autenticação.');
-          // Falha silenciosa e usa localStorage
-          return await getCartFromLocalStorage();
-        }
-
-        // Outros erros
-        const errorText = await response.text();
-        console.error('Erro ao buscar carrinho:', errorText);
-        throw new Error(`Erro ${response.status}: ${errorText}`);
-      }
-
-      const data = await processApiResponse(response);
-
-      // Se o servidor retorna o carrinho em um formato diferente, ajustamos aqui
-      return data.cart || data;
-    } else {
-      // Fallback para localStorage para usuários não autenticados
-      return new Promise((resolve) => {
-        const savedCart = localStorage.getItem('cart');
-        if (savedCart) {
-          try {
-            resolve(JSON.parse(savedCart));
-          } catch (error) {
-            console.error('Erro ao carregar carrinho:', error);
-            resolve({ items: [] });
-          }
-        } else {
-          resolve({ items: [] });
-        }
-      });
+    // Se não está autenticado, retorna o carrinho local
+    if (!isAuthenticated()) {
+      return getCartFromLocalStorage();
     }
+
+    // Buscar carrinho do servidor
+    const response = await fetch(`${import.meta.env.VITE_API_URL}/api/carts`, {
+      method: 'GET',
+      headers: getAuthHeaders(),
+    });
+
+    if (response.ok) {
+      const data = await response.json();
+      return data.cart || data;
+    }
+
+    // Fallback para localStorage em caso de erro
+    console.warn('Erro ao buscar carrinho do servidor, usando localStorage');
+    return getCartFromLocalStorage();
   } catch (error) {
-    console.error('Erro ao obter carrinho:', error);
-    // Em caso de erro na API, tentar carregar do localStorage
+    console.error('Erro ao buscar carrinho:', error);
     return getCartFromLocalStorage();
   }
 };
 
-// Função auxiliar para carregar do localStorage
-const getCartFromLocalStorage = () => {
-  return new Promise((resolve) => {
-    const savedCart = localStorage.getItem('cart');
-    if (savedCart) {
-      try {
-        resolve(JSON.parse(savedCart));
-      } catch (error) {
-        console.error('Erro ao carregar carrinho do localStorage:', error);
-        resolve({ items: [] });
-      }
-    } else {
-      resolve({ items: [] });
-    }
-  });
-};
-
+// Adicionar item ao carrinho
 export const addToCart = async (item) => {
-  try {
-    if (isAuthenticated()) {
-      // Garantir que sneakerId e variantId estejam presentes e formatados corretamente
-      const payload = {
-        sneakerId: item.sneakerId,
-        variantId: item.variantId,
-        quantity: item.quantity || 1,
-        size: item.size,
-        color: item.color,
-        name: item.name,
-        price: item.price,
-        image: item.image,
-        brand: item.brand,
-        slug: item.slug
-      };
-
-      // Obter headers com autenticação
-      const headers = getAuthHeaders();;
-      
-      // Adicionar ao carrinho no servidor para usuários autenticados
-      const response = await fetch(`${import.meta.env.VITE_API_URL}/cart`, {
-        method: 'POST',
-        headers: headers,
-        body: JSON.stringify(payload)
-      });
-      
-      if (!response.ok) {
-        // Tentar obter o corpo da resposta de erro
-        let errorBody = {};
-        try {
-          errorBody = await response.json();
-        } catch (e) {
-          const errorText = await response.text();
-          console.error('Corpo da resposta de erro (texto):', errorText);
-          throw new Error(`Erro ${response.status}: Não foi possível processar a resposta`);
-        }
-        
-        console.error('Corpo da resposta de erro:', errorBody);
-        throw new Error(errorBody.message || `Erro ${response.status}: Falha ao adicionar item`);
-      }
-      
-      const result = await processApiResponse(response);
-      return result;
-    } else {
-      // Fallback para localStorage para usuários não autenticados
-      const cart = await getCartFromLocalStorage();
-
-      // Verifica se o item já existe no carrinho
-      const existingItemIndex = cart.items.findIndex(
-        (cartItem) =>
-          cartItem.sneakerId === item.sneakerId &&
-          cartItem.size === item.size &&
-          cartItem.color === item.color
-      );
-
-      let updatedItem;
-
-      if (existingItemIndex >= 0) {
-        // Item já existe no carrinho
-        const existingItem = cart.items[existingItemIndex];
-
-        // CORREÇÃO: Somar a nova quantidade à quantidade existente
-        // Assim, mesmo após recarregar a página, a quantidade será mantida
-        const combinedQuantity = existingItem.quantity + item.quantity;
-
-        // Atualiza o item existente SOMANDO a quantidade
-        updatedItem = {
-          ...existingItem,
-          quantity: combinedQuantity,
-        };
-
-        cart.items[existingItemIndex] = updatedItem;
-      } else {
-        // Gera ID único apenas para novos itens
-        const cartItemId = `${item.sneakerId}-${item.size}-${
-          item.color
-        }-${Date.now()}`;
-        // Adiciona novo item ao carrinho
-        updatedItem = { ...item, cartItemId };
-        cart.items.push(updatedItem);
-      }
-
-      // Salva o carrinho atualizado
-      localStorage.setItem('cart', JSON.stringify(cart));
-
-      return { success: true, cart, item: updatedItem };
-    }
-  } catch (error) {
-    console.error('Erro ao adicionar item ao carrinho:', error);
-    return { 
-      success: false, 
-      error: error.message,
-      item: item // Retorna o item original para debugging
-    };
+  if (!item.sneakerId) {
+    return { success: false, error: 'ID do produto é necessário' };
   }
-};
 
-export const removeFromCart = async (cartItemId) => {
   try {
+    // Preparar o item para adicionar
+    const cartItem = {
+      ...item,
+      quantity: item.quantity || 1,
+    };
+
+    // Para usuários autenticados, enviar para o servidor
     if (isAuthenticated()) {
-      // Remover do carrinho no servidor para usuários autenticados
+      // Tratar o variantId que é obrigatório
+      // Usar sizeId como variantId se ele não existir
+      if (!cartItem.variantId && cartItem.sizeId) {
+        cartItem.variantId = cartItem.sizeId;
+      }
+      // Se não tiver variantId nem sizeId, usar colorId ou gerar um ID baseado em propriedades
+      else if (!cartItem.variantId) {
+        if (cartItem.colorId) {
+          cartItem.variantId = cartItem.colorId;
+        } else {
+          // Gerar um ID com base nas propriedades disponíveis
+          console.warn('variantId não fornecido, tentando gerar um substituto');
+          // Verificar se temos um sizeId válido primeiro antes de usar propriedades alternativas
+          if (cartItem.size && cartItem.color) {
+            // Construir um ID baseado no produto, tamanho e cor
+            cartItem.variantId =
+              cartItem.sizeId ||
+              `${cartItem.sneakerId}-${cartItem.size}-${cartItem.color}`;
+          } else {
+            return {
+              success: false,
+              error:
+                'variantId, sizeId ou combinação de size e color é obrigatório',
+            };
+          }
+        }
+      }
+
       const response = await fetch(
-        `${import.meta.env.VITE_API_URL}/cart/${cartItemId}`,
+        `${import.meta.env.VITE_API_URL}/api/carts`,
         {
-          method: 'DELETE',
+          method: 'POST',
           headers: getAuthHeaders(),
+          body: JSON.stringify(cartItem),
         }
       );
 
-      if (!response.ok) {
-        throw new Error('Falha ao remover item do carrinho no servidor');
+      if (response.ok) {
+        return await response.json();
       }
 
-      return await response.json();
-    } else {
-      // Fallback para localStorage para usuários não autenticados
-      const cart = await getCartFromLocalStorage();
-
-      // Remove o item do carrinho
-      const updatedItems = cart.items.filter(
-        (item) => item.cartItemId !== cartItemId
-      );
-
-      const updatedCart = { ...cart, items: updatedItems };
-
-      // Salva o carrinho atualizado
-      localStorage.setItem('cart', JSON.stringify(updatedCart));
-
-      return { success: true, cart: updatedCart };
+      // Obter detalhes do erro
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.message || `Erro ${response.status}`);
     }
+
+    // Para usuários não autenticados, salvar no localStorage
+    return addToLocalCart(cartItem);
   } catch (error) {
-    console.error('Erro ao remover item do carrinho:', error);
+    console.error('Erro ao adicionar ao carrinho:', error);
     return { success: false, error: error.message };
   }
 };
 
-export const updateCartItemQuantity = async (cartItemId, quantity) => {
-  try {
-    if (quantity < 1) {
-      throw new Error('Quantidade deve ser pelo menos 1');
-    }
+// Adicionar ao carrinho local
+const addToLocalCart = (item) => {
+  const cart = getCartFromLocalStorage();
 
+  // Verificar se o item já existe
+  const existingIndex = cart.items.findIndex(
+    (i) =>
+      i.sneakerId === item.sneakerId &&
+      i.size === item.size &&
+      i.color === item.color
+  );
+
+  // Item já existe: atualizar quantidade
+  if (existingIndex >= 0) {
+    cart.items[existingIndex].quantity += item.quantity;
+  } else {
+    // Novo item: adicionar ao carrinho com ID único
+    cart.items.push({
+      ...item,
+      cartItemId: `${item.sneakerId}-${item.size}-${item.color}-${Date.now()}`,
+    });
+  }
+
+  // Salvar carrinho atualizado
+  saveCartToLocalStorage(cart);
+  return { success: true, cart };
+};
+
+// Atualizar quantidade
+export const updateCartItemQuantity = async (cartItemId, quantity) => {
+  if (quantity < 1)
+    return { success: false, error: 'Quantidade deve ser pelo menos 1' };
+
+  try {
     if (isAuthenticated()) {
-      // Atualizar quantidade no servidor para usuários autenticados
       const response = await fetch(
-        `${import.meta.env.VITE_API_URL}/cart/${cartItemId}`,
+        `${import.meta.env.VITE_API_URL}/api/carts/${cartItemId}`,
         {
           method: 'PATCH',
           headers: getAuthHeaders(),
@@ -252,25 +160,18 @@ export const updateCartItemQuantity = async (cartItemId, quantity) => {
         }
       );
 
-      if (!response.ok) {
-        throw new Error('Falha ao atualizar quantidade no servidor');
+      if (response.ok) {
+        return await response.json();
       }
-
-      return await response.json();
+      throw new Error('Falha ao atualizar quantidade');
     } else {
-      // Fallback para localStorage para usuários não autenticados
-      const cart = await getCartFromLocalStorage();
-
-      // Encontra e atualiza o item
+      const cart = getCartFromLocalStorage();
       const updatedItems = cart.items.map((item) =>
         item.cartItemId === cartItemId ? { ...item, quantity } : item
       );
 
       const updatedCart = { ...cart, items: updatedItems };
-
-      // Salva o carrinho atualizado
-      localStorage.setItem('cart', JSON.stringify(updatedCart));
-
+      saveCartToLocalStorage(updatedCart);
       return { success: true, cart: updatedCart };
     }
   } catch (error) {
@@ -279,52 +180,128 @@ export const updateCartItemQuantity = async (cartItemId, quantity) => {
   }
 };
 
+// Remover item do carrinho
+export const removeFromCart = async (cartItemId) => {
+  try {
+    if (isAuthenticated()) {
+      const response = await fetch(
+        `${import.meta.env.VITE_API_URL}/api/carts/${cartItemId}`,
+        {
+          method: 'DELETE',
+          headers: getAuthHeaders(),
+        }
+      );
+
+      if (response.ok) {
+        return await response.json();
+      }
+      throw new Error('Falha ao remover item');
+    } else {
+      const cart = getCartFromLocalStorage();
+      const updatedCart = {
+        ...cart,
+        items: cart.items.filter((item) => item.cartItemId !== cartItemId),
+      };
+
+      saveCartToLocalStorage(updatedCart);
+      return { success: true, cart: updatedCart };
+    }
+  } catch (error) {
+    console.error('Erro ao remover item:', error);
+    return { success: false, error: error.message };
+  }
+};
+
+// Limpar carrinho
 export const clearCart = async () => {
   try {
     if (isAuthenticated()) {
-      // Limpar carrinho no servidor para usuários autenticados
-      const response = await fetch(`${import.meta.env.VITE_API_URL}/cart`, {
-        method: 'DELETE',
-        headers: getAuthHeaders(),
-      });
+      const response = await fetch(
+        `${import.meta.env.VITE_API_URL}/api/carts`,
+        {
+          method: 'DELETE',
+          headers: getAuthHeaders(),
+        }
+      );
 
-      if (!response.ok) {
-        throw new Error('Falha ao limpar carrinho no servidor');
+      if (response.ok) {
+        localStorage.removeItem('cart');
+        return await response.json();
       }
-
-      // Também limpar localStorage para sincronizar
-      localStorage.removeItem('cart');
-      return await response.json();
-    } else {
-      // Fallback para localStorage para usuários não autenticados
-      localStorage.setItem('cart', JSON.stringify({ items: [] }));
-
-      return { success: true, cart: { items: [] } };
+      throw new Error('Falha ao limpar carrinho');
     }
+
+    localStorage.removeItem('cart');
+    return { success: true, cart: { items: [] } };
   } catch (error) {
     console.error('Erro ao limpar carrinho:', error);
     return { success: false, error: error.message };
   }
 };
 
-export const syncCart = async (cartData) => {
+// Sincronizar carrinho do localStorage para o servidor (após login)
+export const syncCart = async () => {
+  // Só prosseguir se estiver autenticado
+  if (!isAuthenticated()) {
+    return { success: false, message: 'Usuário não autenticado' };
+  }
+
+  // Verificar se existe um carrinho local para sincronizar
+  const localCart = getCartFromLocalStorage();
+  if (!localCart.items || localCart.items.length === 0) {
+    return { success: true, message: 'Nenhum item para sincronizar' };
+  }
+
   try {
-    if (!isAuthenticated()) {
-      return { success: false, message: 'Usuário não autenticado' };
+    let successCount = 0;
+
+    // Adicionar cada item do carrinho local ao servidor
+    for (const item of localCart.items) {
+      try {
+        // Remover propriedades que podem causar problemas
+        const cleanItem = {
+          sneakerId: item.sneakerId,
+          size: item.size,
+          color: item.color,
+          name: item.name,
+          price: item.price,
+          quantity: item.quantity,
+          image: item.image,
+          brand: item.brand,
+          slug: item.slug,
+        };
+
+        const result = await addToCart(cleanItem);
+        if (result.success) {
+          successCount++;
+        }
+      } catch (e) {
+        console.warn(
+          `Falha ao adicionar item ${item.name || item.sneakerId}:`,
+          e
+        );
+      }
     }
 
-    const response = await fetch(`${import.meta.env.VITE_API_URL}/cart/sync`, {
-      method: 'POST',
-      headers: getAuthHeaders(),
-      body: JSON.stringify(cartData),
-    });
+    // Se pelo menos um item foi transferido com sucesso
+    if (successCount > 0) {
+      // Limpar o carrinho local
+      localStorage.removeItem('cart');
 
-    if (!response.ok) {
-      const errorData = await response.json();
-      throw new Error(errorData.message || 'Falha ao sincronizar carrinho');
+      // Buscar o carrinho atualizado do servidor
+      const updatedCart = await getCart();
+
+      return {
+        success: true,
+        message: `${successCount} de ${localCart.items.length} itens sincronizados com sucesso`,
+        cart: updatedCart,
+      };
     }
 
-    return await response.json();
+    return {
+      success: false,
+      message: 'Não foi possível sincronizar nenhum item',
+    };
   } catch (error) {
     console.error('Erro ao sincronizar carrinho:', error);
     return { success: false, error: error.message };

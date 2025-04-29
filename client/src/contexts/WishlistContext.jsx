@@ -1,61 +1,64 @@
 import { toast } from '@/hooks/use-toast';
 import {
-  addFavorite,
-  getUserFavorites,
-  removeFavorite,
+  addToWishlist,
+  getWishlist,
+  removeFromWishlist,
 } from '@/services/wishlist.service';
 import { createContext, useContext, useEffect, useState } from 'react';
 import { useAuth } from './AuthContext';
 
-const FavoritesContext = createContext();
+const WishlistContext = createContext();
 
-export const FavoritesProvider = ({ children }) => {
-  const [favorites, setFavorites] = useState([]);
+export const WishlistProvider = ({ children }) => {
+  const [wishlistItems, setWishlistItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const { user, isAuthenticated } = useAuth();
 
-  // Carregar favoritos quando o componente montar ou usuário autenticar
-  const loadFavorites = async () => {
+  // Carregar wishlist quando o componente montar ou usuário autenticar
+  const loadWishlist = async () => {
     if (!isAuthenticated) {
-      setFavorites([]);
+      setWishlistItems([]);
       setLoading(false);
       return;
     }
 
     setLoading(true);
     try {
-      const response = await getUserFavorites();
-      // A API pode retornar um array de documentos, então pegamos o primeiro se for um array
-      const userFavorites =
-        Array.isArray(response) && response.length > 0 ? response[0] : response;
+      const response = await getWishlist();
 
-      // Extraímos a lista de IDs dos sneakers favoritos para ter um formato consistente
-      const favoriteSneakers = userFavorites?.sneakers || [];
-      setFavorites(favoriteSneakers);
+      if (response.success) {
+        // O novo backend retorna { success: true, wishlist: [...] }
+        setWishlistItems(response.wishlist || []);
+      } else {
+        console.error('Erro ao carregar wishlist:', response.message);
+        setWishlistItems([]);
+      }
     } catch (error) {
-      console.error('Erro ao carregar favoritos:', error);
-      setFavorites([]);
+      console.error('Erro ao carregar wishlist:', error);
+      setWishlistItems([]);
     } finally {
       setLoading(false);
     }
   };
 
-  // Carregar favoritos no início e quando o status de autenticação mudar
+  // Carregar wishlist no início e quando o status de autenticação mudar
   useEffect(() => {
-    loadFavorites();
+    loadWishlist();
   }, [isAuthenticated]);
 
-  // Verificar se um produto está nos favoritos
-  const isFavorite = (sneakerId) => {
-    return favorites.includes(sneakerId);
+  // Verificar se um produto está na wishlist
+  const isInWishlist = (sneakerId) => {
+    return wishlistItems.some(item => 
+      item._id === sneakerId || item === sneakerId
+    );
   };
 
-  // Adicionar aos favoritos
-  const addToFavorites = async (sneakerId) => {
+  // Adicionar à wishlist
+  const addToWishlistItem = async (sneakerId) => {
     if (!isAuthenticated) {
       toast({
         title: 'Autenticação necessária',
-        description: 'Faça login para adicionar itens aos favoritos',
+        description: 'Faça login para adicionar itens à wishlist',
         variant: 'default',
       });
       return false;
@@ -63,84 +66,96 @@ export const FavoritesProvider = ({ children }) => {
 
     try {
       // Atualiza o estado local imediatamente para feedback instantâneo
-      setFavorites((prev) => [...prev, sneakerId]);
+      setWishlistItems((prev) => [...prev, sneakerId]);
 
       // Chama a API em segundo plano
-      await addFavorite(sneakerId);
+      const response = await addToWishlist(sneakerId);
 
-      // Recarrega os favoritos para garantir sincronização
-      await loadFavorites();
+      if (!response.success) {
+        throw new Error(response.message || 'Erro ao adicionar à wishlist');
+      }
+
+      // Recarrega a wishlist para garantir sincronização
+      await loadWishlist();
       return true;
     } catch (error) {
-      console.error('Erro ao adicionar aos favoritos:', error);
+      console.error('Erro ao adicionar à wishlist:', error);
       // Reverte a mudança local em caso de erro
-      setFavorites((prev) => prev.filter((id) => id !== sneakerId));
+      setWishlistItems((prev) => prev.filter((id) => id !== sneakerId));
       toast({
         title: 'Erro',
-        description: 'Não foi possível adicionar aos favoritos',
+        description: 'Não foi possível adicionar à wishlist',
         variant: 'destructive',
       });
       return false;
     }
   };
 
-  // Remover dos favoritos
-  const removeFromFavorites = async (sneakerId) => {
+  // Remover da wishlist
+  const removeFromWishlistItem = async (sneakerId) => {
     if (!isAuthenticated) return false;
 
     try {
       // Atualiza o estado local imediatamente para feedback instantâneo
-      setFavorites((prev) => prev.filter((id) => id !== sneakerId));
+      setWishlistItems((prev) => 
+        prev.filter(item => 
+          (typeof item === 'object' ? item._id !== sneakerId : item !== sneakerId)
+        )
+      );
 
       // Chama a API em segundo plano
-      await removeFavorite(sneakerId);
+      const response = await removeFromWishlist(sneakerId);
 
-      // Recarrega os favoritos para garantir sincronização
-      await loadFavorites();
+      if (!response.success) {
+        throw new Error(response.message || 'Erro ao remover da wishlist');
+      }
+
+      // Recarrega a wishlist para garantir sincronização
+      await loadWishlist();
       return true;
     } catch (error) {
-      console.error('Erro ao remover dos favoritos:', error);
+      console.error('Erro ao remover da wishlist:', error);
       // Reverte a mudança local em caso de erro
-      setFavorites((prev) => [...prev, sneakerId]);
+      loadWishlist(); // Recarregar lista completa é mais seguro que tentar adicionar de volta
       toast({
         title: 'Erro',
-        description: 'Não foi possível remover dos favoritos',
+        description: 'Não foi possível remover da wishlist',
         variant: 'destructive',
       });
       return false;
     }
   };
 
-  // Alternar favorito (adicionar se não existir, remover se existir)
-  const toggleFavorite = async (sneakerId) => {
-    if (isFavorite(sneakerId)) {
-      return removeFromFavorites(sneakerId);
+  // Alternar item na wishlist (adicionar se não existir, remover se existir)
+  const toggleWishlistItem = async (sneakerId) => {
+    if (isInWishlist(sneakerId)) {
+      return removeFromWishlistItem(sneakerId);
     } else {
-      return addToFavorites(sneakerId);
+      return addToWishlistItem(sneakerId);
     }
   };
 
   const value = {
-    favorites, // Lista de IDs dos produtos favoritos
-    isFavorite, // Função para verificar se um produto está nos favoritos
-    toggleFavorite, // Função para alternar o status de favorito
-    addToFavorites, // Função para adicionar aos favoritos
-    removeFromFavorites, // Função para remover dos favoritos
-    loading, // Estado de carregamento
+    wishlistItems,
+    isInWishlist,
+    toggleWishlistItem,
+    addToWishlistItem,
+    removeFromWishlistItem,
+    loading,
   };
 
   return (
-    <FavoritesContext.Provider value={value}>
+    <WishlistContext.Provider value={value}>
       {children}
-    </FavoritesContext.Provider>
+    </WishlistContext.Provider>
   );
 };
 
-export const useFavorites = () => {
-  const context = useContext(FavoritesContext);
+export const useWishlist = () => {
+  const context = useContext(WishlistContext);
   if (!context) {
     throw new Error(
-      'useFavorites deve ser usado dentro de um FavoritesProvider'
+      'useWishlist deve ser usado dentro de um WishlistProvider'
     );
   }
   return context;

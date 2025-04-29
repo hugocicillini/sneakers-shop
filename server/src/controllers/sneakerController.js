@@ -153,6 +153,7 @@ export const getSneakerBySlug = async (req, res) => {
       .populate('category')
       .populate({
         path: 'reviews',
+        match: { isVerified: true }, // Adicionar filtro para reviews verificadas
         select: 'rating comment user date',
         options: { sort: { date: -1 }, limit: 5 },
       });
@@ -236,7 +237,9 @@ export const getSneakerBySlug = async (req, res) => {
       relatedSneakers = await Sneaker.find({
         _id: { $in: sneaker.relatedSneakers },
         isActive: true,
-      }).select('name basePrice coverImage slug baseDiscount brand');
+      })
+        .select('name basePrice coverImage slug baseDiscount brand rating')
+        .populate('brand');
     }
 
     // Resposta formatada

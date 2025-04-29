@@ -9,7 +9,7 @@ const reviewSchema = new mongoose.Schema(
     },
     sneaker: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: 'Sneakers',
+      ref: 'Sneaker', // Corrigido de 'Sneakers' para 'Sneaker'
       required: true,
     },
     comment: {
@@ -43,8 +43,8 @@ reviewSchema.index({ user: 1, sneaker: 1 }, { unique: true }); // Evita avaliaç
 reviewSchema.post('save', async function () {
   try {
     // Usando o modelo diretamente para evitar referência circular
-    const Sneakers = mongoose.model('Sneakers');
-    const sneaker = await Sneakers.findById(this.sneaker);
+    const Sneaker = mongoose.model('Sneaker'); // Corrigido de 'Sneakers' para 'Sneaker'
+    const sneaker = await Sneaker.findById(this.sneaker);
 
     if (sneaker) {
       // Se encontrar o tênis, recalcula a média de avaliações

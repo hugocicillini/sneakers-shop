@@ -47,11 +47,16 @@ export const getSneakers = async (
 
   if (filters.price) {
     if (filters.price.min) {
+      // Enviar preço mínimo como parâmetro para o backend (sem alteração)
       params.set('minPrice', filters.price.min);
     }
     if (filters.price.max) {
+      // Enviar preço máximo como parâmetro para o backend (sem alteração)
       params.set('maxPrice', filters.price.max);
     }
+
+    // Adicionar parâmetro para indicar que queremos considerar preço após desconto
+    params.set('considerDiscount', 'true');
   }
 
   // Corrigir o envio da ordenação para usar o mapeamento adequado
@@ -68,7 +73,7 @@ export const getSneakers = async (
 
   // Implementação de deduplicação de requisições
   const requestKey = url;
-  
+
   // Se já existe uma requisição pendente com esta mesma URL, retorne a promise existente
   if (pendingRequests[requestKey]) {
     return pendingRequests[requestKey];
@@ -95,7 +100,7 @@ export const getSneakers = async (
 
     // Armazena a promise para potenciais requisições duplicadas
     pendingRequests[requestKey] = requestPromise;
-    
+
     return requestPromise;
   } catch (error) {
     console.error('Erro ao buscar tênis:', error);
@@ -126,7 +131,7 @@ function mapSortByToBackend(sortBy) {
 export const getSneakerBySlug = async (slug) => {
   // Atualização para usar URL base da variável de ambiente e popular variantes/reviews
   const response = await fetch(
-    `${import.meta.env.VITE_API_URL}/sneakers/${slug}`,
+    `${import.meta.env.VITE_API_URL}/api/sneakers/${slug}`,
     {
       method: 'GET',
       headers: {

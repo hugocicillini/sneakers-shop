@@ -158,7 +158,7 @@ export const updateAddress = async (req, res) => {
 export const deleteAddress = async (req, res) => {
   try {
     const { id } = req.params;
-    console.log('ID do endereço a ser excluído:', id);
+
     const userId = req.user._id; // Obter ID do usuário autenticado
 
     // Buscar o endereço antes de deletar

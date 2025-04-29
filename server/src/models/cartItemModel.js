@@ -4,7 +4,7 @@ const cartItemSchema = new mongoose.Schema(
   {
     sneaker: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: 'Sneakers',
+      ref: 'Sneaker',
       required: true,
     },
     variant: {

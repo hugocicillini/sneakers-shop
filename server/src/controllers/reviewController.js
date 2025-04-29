@@ -60,7 +60,7 @@ export const getSneakerReviews = async (req, res) => {
   const sort = req.query.sort || 'recent';
 
   // Verificar se o sneaker existe
-  const sneakerExists = await Sneakers.findById(sneakerId);
+  const sneakerExists = await Sneaker.findById(sneakerId);
   if (!sneakerExists) {
     res.status(404);
     throw new Error('Sneaker não encontrado');
@@ -128,7 +128,7 @@ export const createReview = async (req, res) => {
   }
 
   // Verificar se o sneaker existe
-  const sneaker = await Sneakers.findById(sneakerId);
+  const sneaker = await Sneaker.findById(sneakerId);
   
   if (!sneaker) {
     res.status(404);
@@ -222,7 +222,7 @@ export const deleteReview = async (req, res) => {
   await review.deleteOne();
 
   // Recalcular a média de avaliação manualmente já que o middleware post-save não será acionado
-  const sneaker = await Sneakers.findById(review.sneaker);
+  const sneaker = await Sneaker.findById(review.sneaker);
   if (sneaker) {
     await sneaker.calculateAverageRating();
   }

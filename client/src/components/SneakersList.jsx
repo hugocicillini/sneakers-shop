@@ -1,4 +1,4 @@
-import { useFavorites } from '@/contexts/WishlistContext';
+import { useWishlist } from '@/contexts/WishlistContext';
 import { Heart, ShoppingCart, Star } from 'lucide-react';
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
@@ -7,7 +7,7 @@ import { Button } from './ui/button';
 import { Card, CardContent, CardFooter, CardTitle } from './ui/card';
 
 const SneakersList = ({ sneakers }) => {
-  const { isFavorite, toggleFavorite, loading } = useFavorites();
+  const { isInWishlist, toggleWishlistItem, loading } = useWishlist();
   const [pendingActions, setPendingActions] = useState({});
 
   // Função para formatar preço em reais
@@ -30,7 +30,7 @@ const SneakersList = ({ sneakers }) => {
     setPendingActions((prev) => ({ ...prev, [sneakerId]: true }));
 
     try {
-      await toggleFavorite(sneakerId);
+      await toggleWishlistItem(sneakerId);
     } finally {
       // Sempre liberar o estado de pendente, mesmo em caso de erro
       setPendingActions((prev) => ({ ...prev, [sneakerId]: false }));
@@ -70,7 +70,7 @@ const SneakersList = ({ sneakers }) => {
                           : 'hover:scale-110'
                       } 
                       ${
-                        isFavorite(item._id) ? 'text-red-500' : 'text-gray-400'
+                        isInWishlist(item._id) ? 'text-red-500' : 'text-gray-400'
                       }`}
                     onClick={(e) => {
                       e.preventDefault();
@@ -78,17 +78,15 @@ const SneakersList = ({ sneakers }) => {
                     }}
                     disabled={pendingActions[item._id] || loading}
                     aria-label={
-                      isFavorite(item._id)
+                      isInWishlist(item._id)
                         ? 'Remover dos favoritos'
                         : 'Adicionar aos favoritos'
                     }
                   >
                     <Heart
                       size={20}
-                      fill={isFavorite(item._id) ? 'currentColor' : 'none'}
-                      className={
-                        pendingActions[item._id] ? 'animate-pulse' : ''
-                      }
+                      fill={isInWishlist(item._id) ? 'currentColor' : 'none'}
+                      className={pendingActions[item._id] ? 'animate-pulse' : ''}
                     />
                   </button>
 

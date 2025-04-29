@@ -1,6 +1,8 @@
+import Footer from '@/components/Footer';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/contexts/AuthContext';
-import { useFavorites } from '@/contexts/WishlistContext';
+import { useCart } from '@/contexts/CartContext';
+import { useWishlist } from '@/contexts/WishlistContext';
 import {
   CircleUserRound,
   Heart,
@@ -12,8 +14,6 @@ import {
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import Search from '../components/Search';
-import Footer from '@/components/Footer';
-import { useCart } from '@/contexts/CartContext';
 
 const LayoutBase = ({ children, search, setSearch }) => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
@@ -22,13 +22,12 @@ const LayoutBase = ({ children, search, setSearch }) => {
   // Substituído o useContext por useAuth para acessar as funções de autenticação
   const { user, logout } = useAuth();
 
-  const { favorites } = useFavorites();
+  const { wishlistItems } = useWishlist();
 
   const { cartCount } = useCart(); // Adicionei o cartCount aqui para o carrinho
 
-  // Calcular número de favoritos - garantir que sempre seja um número
-  const favoritesCount = Array.isArray(favorites) ? favorites.length : 0;
-
+  // Calcular número de itens na wishlist - garantir que sempre seja um número
+  const wishlistCount = Array.isArray(wishlistItems) ? wishlistItems.length : 0;
 
   // Verificar tamanho da tela para determinar se é mobile
   useEffect(() => {
@@ -81,7 +80,7 @@ const LayoutBase = ({ children, search, setSearch }) => {
               <Link to="/favorites">
                 <Heart size={24} />
                 <span className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full h-5 w-5 flex items-center justify-center text-xs">
-                  {favoritesCount}
+                  {wishlistCount}
                 </span>
               </Link>
             </div>
@@ -137,9 +136,9 @@ const LayoutBase = ({ children, search, setSearch }) => {
               <Button variant="outline">
                 <Heart />
                 Favoritos
-                {favoritesCount > 0 && (
+                {wishlistCount > 0 && (
                   <span className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full h-5 w-5 flex items-center justify-center text-xs">
-                    {favoritesCount}
+                    {wishlistCount}
                   </span>
                 )}{' '}
               </Button>
@@ -148,9 +147,11 @@ const LayoutBase = ({ children, search, setSearch }) => {
               <Button variant="outline">
                 <ShoppingBag />
                 Carrinho
-                <span className="absolute -top-2 -right-2 bg-black text-white rounded-full h-5 w-5 flex items-center justify-center text-xs">
-                  {cartCount}
-                </span>
+                {cartCount > 0 && (
+                  <span className="absolute -top-2 -right-2 bg-black text-white rounded-full h-5 w-5 flex items-center justify-center text-xs">
+                    {cartCount}
+                  </span>
+                )}
               </Button>
             </Link>
           </nav>
@@ -251,7 +252,6 @@ const LayoutBase = ({ children, search, setSearch }) => {
       <main className="min-h-screen">{children}</main>
       <Footer />
     </div>
-    
   );
 };
 

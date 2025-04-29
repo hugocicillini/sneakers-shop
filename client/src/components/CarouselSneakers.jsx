@@ -149,18 +149,19 @@ const CarouselSneakers = ({
                   <div className="relative h-[150px] overflow-hidden bg-gray-100">
                     <img
                       src={
-                        (sneaker.images && sneaker.images[0]?.url) ||
+                        (sneaker.coverImage && sneaker.coverImage.url) ||
                         '/placeholder-image.jpg'
                       }
                       alt={sneaker.name}
                       className="object-cover w-full h-full"
                     />
-                    {sneaker.discount > 0 && (
+                    {/* Usar baseDiscount em vez de discount */}
+                    {sneaker.baseDiscount > 0 && (
                       <Badge
                         className="absolute top-2 right-2 bg-red-500"
                         variant="destructive"
                       >
-                        -{sneaker.discount}%
+                        -{sneaker.baseDiscount}%
                       </Badge>
                     )}
                   </div>
@@ -168,27 +169,31 @@ const CarouselSneakers = ({
                     <CardTitle className="text-sm font-medium line-clamp-2">
                       {sneaker.name}
                     </CardTitle>
-                    <p className="text-xs text-gray-500">{sneaker.brand}</p>
+                    <p className="text-xs text-gray-500">
+                      {/* Verificar se brand é um objeto ou um ID */}
+                      {sneaker.brand.name}
+                    </p>
                   </CardHeader>
                   <CardFooter className="p-4 pt-0 flex justify-between">
                     <div className="flex flex-col">
-                      {sneaker.discount > 0 ? (
+                      {/* Usar baseDiscount e basePrice em vez de discount e price */}
+                      {sneaker.baseDiscount > 0 ? (
                         <>
                           <span className="font-semibold text-primary">
                             R${' '}
                             {sneaker.finalPrice ||
                               (
-                                sneaker.price *
-                                (1 - sneaker.discount / 100)
+                                sneaker.basePrice *
+                                (1 - sneaker.baseDiscount / 100)
                               ).toFixed(2)}
                           </span>
                           <span className="text-xs text-gray-500 line-through">
-                            R$ {sneaker.price?.toFixed(2)}
+                            R$ {sneaker.basePrice?.toFixed(2)}
                           </span>
                         </>
                       ) : (
                         <span className="font-semibold text-primary">
-                          R$ {sneaker.price?.toFixed(2)}
+                          R$ {sneaker.basePrice?.toFixed(2)}
                         </span>
                       )}
                     </div>

@@ -19,7 +19,7 @@ export const getSneakerReviews = async (sneakerId, options = {}) => {
   const response = await fetch(
     `${
       import.meta.env.VITE_API_URL
-    }/reviews/sneaker/${sneakerId}?${queryParams}`,
+    }/api/reviews/sneaker/${sneakerId}?${queryParams}`,
     {
       method: 'GET',
       headers: {

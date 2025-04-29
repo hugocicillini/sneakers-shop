@@ -1,102 +1,122 @@
-import { Wishlist } from '../models/wishlistModel.js';
+import { Client } from '../models/clientModel.js';
 import { Sneaker } from '../models/sneakerModel.js';
 
 // Adicionar um tênis aos favoritos
 export const addFavorite = async (req, res) => {
   try {
     const { sneakerId } = req.body;
+    const userId = req.user._id; // Obtém ID do usuário autenticado via middleware
 
-    // Verifica se o usuário está autenticado
-    if (!req.user || !req.user.id) {
-      return res.status(401).json({ message: 'User not authenticated' });
-    }
-
-    const existingSneaker = await Sneakers.findById(sneakerId);
-
+    // Verificar se o tênis existe
+    const existingSneaker = await Sneaker.findById(sneakerId);
     if (!existingSneaker) {
-      return res.status(404).json({ message: 'Sneaker not found' });
+      return res.status(404).json({
+        success: false,
+        message: 'Tênis não encontrado',
+      });
     }
 
-    const userId = req.user.id;
-
-    let favorite = await Wishlist.findOne({ user: userId });
-
-    if (!favorite) {
-      favorite = new Wishlist({ user: userId, sneakers: [sneakerId] });
-    } else {
-      if (!favorite.sneakers.includes(sneakerId)) {
-        favorite.sneakers.push(sneakerId);
-      }
+    // Buscar cliente e atualizar sua wishlist
+    const client = await Client.findById(userId);
+    if (!client) {
+      return res.status(404).json({
+        success: false,
+        message: 'Cliente não encontrado',
+      });
     }
 
-    await favorite.save();
+    // Inicializar wishlist se não existir
+    if (!client.wishlist) {
+      client.wishlist = [];
+    }
 
-    res.status(200).json(favorite);
+    // Verificar se o tênis já está na wishlist
+    if (!client.wishlist.includes(sneakerId)) {
+      client.wishlist.push(sneakerId);
+      await client.save();
+    }
+
+    // Retornar a wishlist atualizada
+    res.status(200).json({
+      success: true,
+      wishlist: client.wishlist,
+    });
   } catch (error) {
-    res.status(500).json({ message: 'Error adding to favorites', error });
+    console.error('Erro no addFavorite:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Erro ao adicionar aos favoritos',
+      error: error.message,
+    });
   }
 };
 
-// Obtém todos os favoritos
-
-export const getAllFavorites = async (req, res) => {
+// Obtém os favoritos do usuário autenticado
+export const getFavorites = async (req, res) => {
   try {
-    const favorites = await Wishlist.find();
+    const userId = req.user._id; // Usando ID do middleware
 
-    if (!favorites) {
-      return res.status(404).json({ message: 'No favorites found' });
+    // Buscar cliente com wishlist populada
+    const client = await Client.findById(userId).populate('wishlist');
+
+    if (!client) {
+      return res.status(404).json({
+        success: false,
+        message: 'Cliente não encontrado',
+      });
     }
 
-    res.status(200).json(favorites);
+    res.status(200).json({
+      success: true,
+      wishlist: client.wishlist || [],
+    });
   } catch (error) {
-    res.status(500).json({ message: 'Error fetching favorites', error });
-  }
-};
-
-// Obtém os favoritos do usuário
-export const getFavoritesById = async (req, res) => {
-  try {
-    const favorite = await Wishlist.find({ user: req.user.id });
-
-    if (!favorite) {
-      return res.status(404).json({ message: 'No favorites found' });
-    }
-
-    res.status(200).json(favorite);
-  } catch (error) {
-    res.status(500).json({ message: 'Error fetching favorites', error });
+    res.status(500).json({
+      success: false,
+      message: 'Erro ao buscar favoritos',
+      error: error.message,
+    });
   }
 };
 
 // Remover um tênis dos favoritos
 export const removeFavorite = async (req, res) => {
   try {
-    const { id } = req.params;
+    const { sneakerId } = req.params;
+    const userId = req.user._id; // Usando ID do middleware
 
-    const favorite = await Wishlist.findOne({ user: req.user.id });
-
-    if (!favorite) {
-      return res.status(404).json({ message: 'No favorites found' });
+    // Buscar cliente
+    const client = await Client.findById(userId);
+    if (!client) {
+      return res.status(404).json({
+        success: false,
+        message: 'Cliente não encontrado',
+      });
     }
 
-    const index = favorite.sneakers.indexOf(id);
+    // Verificar se o tênis está na wishlist
+    const index = client.wishlist.indexOf(sneakerId);
     if (index === -1) {
-      return res.status(404).json({ message: 'Sneaker not in favorites' });
+      return res.status(404).json({
+        success: false,
+        message: 'Tênis não está nos favoritos',
+      });
     }
 
-    favorite.sneakers.splice(index, 1);
+    // Remover o tênis da wishlist
+    client.wishlist.splice(index, 1);
+    await client.save();
 
-    if (favorite.sneakers.length === 0) {
-      await Wishlist.deleteOne({ _id: favorite._id });
-      return res
-        .status(200)
-        .json({ message: 'Wishlist deleted as it was empty' });
-    }
-
-    await favorite.save();
-
-    res.status(200).json(favorite);
+    res.status(200).json({
+      success: true,
+      message: 'Tênis removido dos favoritos',
+      wishlist: client.wishlist,
+    });
   } catch (error) {
-    res.status(500).json({ message: 'Error removing from favorites', error });
+    res.status(500).json({
+      success: false,
+      message: 'Erro ao remover dos favoritos',
+      error: error.message,
+    });
   }
 };
