@@ -12,11 +12,7 @@ const SneakersList = ({ sneakers }) => {
 
   // Função para formatar preço em reais
   const formatPrice = (price) => {
-    // Verificar se o preço é válido antes de formatar
-    if (price === undefined || price === null) {
-      return '0,00';
-    }
-    return price.toFixed(2).replace('.', ',');
+    return price ? price.toFixed(2).replace('.', ',') : '0,00';
   };
 
   // Função para favoritar/desfavoritar um item
@@ -43,7 +39,13 @@ const SneakersList = ({ sneakers }) => {
         sneakers.map((item) => (
           <Link
             key={item._id}
-            to={`/sneaker/${item.slug}`}
+            onClick={(e) => {
+              e.preventDefault();
+              // Forçar uma navegação completa para garantir que o componente seja remontado
+              window.location.href = `/sneaker/${
+                item.slug
+              }?color=${item.defaultColor.toLowerCase()}`;
+            }}
             className="no-underline text-inherit"
           >
             <Card className="flex flex-col h-full overflow-hidden transition-all duration-300 hover:shadow-lg group relative">
@@ -70,7 +72,9 @@ const SneakersList = ({ sneakers }) => {
                           : 'hover:scale-110'
                       } 
                       ${
-                        isInWishlist(item._id) ? 'text-red-500' : 'text-gray-400'
+                        isInWishlist(item._id)
+                          ? 'text-red-500'
+                          : 'text-gray-400'
                       }`}
                     onClick={(e) => {
                       e.preventDefault();
@@ -86,7 +90,9 @@ const SneakersList = ({ sneakers }) => {
                     <Heart
                       size={20}
                       fill={isInWishlist(item._id) ? 'currentColor' : 'none'}
-                      className={pendingActions[item._id] ? 'animate-pulse' : ''}
+                      className={
+                        pendingActions[item._id] ? 'animate-pulse' : ''
+                      }
                     />
                   </button>
 
@@ -133,11 +139,7 @@ const SneakersList = ({ sneakers }) => {
                     {item.basePrice && item.baseDiscount > 0 ? (
                       <div>
                         <span className="font-bold text-xl text-primary">
-                          R${' '}
-                          {formatPrice(
-                            item.finalPrice ||
-                              item.basePrice * (1 - item.baseDiscount / 100)
-                          )}
+                          R$ {formatPrice(item.finalPrice)}
                         </span>
                         <span className="text-sm text-gray-500 line-through ml-2">
                           R$ {formatPrice(item.basePrice)}

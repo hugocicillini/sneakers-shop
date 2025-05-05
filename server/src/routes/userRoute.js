@@ -15,7 +15,7 @@ router.get('/', authMiddleware, getUser);
 router.post('/register', registerUser);
 router.post('/login', loginUser);
 
-router.put('/', updateUser);
+router.put('/', authMiddleware, updateUser);
 
 // router.delete('/:id', deleteUser);
 

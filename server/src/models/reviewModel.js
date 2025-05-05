@@ -37,7 +37,7 @@ const reviewSchema = new mongoose.Schema(
 
 // Índices para melhorar consultas comuns
 reviewSchema.index({ sneaker: 1, date: -1 });
-reviewSchema.index({ user: 1, sneaker: 1 }, { unique: true }); // Evita avaliações duplicadas
+reviewSchema.index({ user: 1, sneaker: 1 }); // Remove a restrição de unicidade
 
 // Middleware para sinalizar ao produto que precisa recalcular a média de avaliações
 reviewSchema.post('save', async function () {

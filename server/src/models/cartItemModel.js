@@ -52,7 +52,6 @@ const cartItemSchema = new mongoose.Schema(
     cartItemId: {
       type: String,
       required: true,
-      unique: true,
     },
   },
   { timestamps: true }

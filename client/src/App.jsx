@@ -4,10 +4,14 @@ import { AuthProvider } from './contexts/AuthContext';
 import { CartProvider } from './contexts/CartContext';
 import { WishlistProvider } from './contexts/WishlistContext';
 import Account from './pages/Account'; // Página de conta do usuário
+import Cart from './pages/Cart';
 import Home from './pages/Home';
+import Identification from './pages/Identification';
 import Login from './pages/Login';
 import Register from './pages/Register'; // Se você tiver uma página de registro
+import SearchFound from './pages/SearchFound';
 import SneakerDetail from './pages/SneakerDetail';
+import Wishlist from './pages/Wishlist';
 
 function App() {
   return (
@@ -17,6 +21,8 @@ function App() {
           <BrowserRouter>
             <Routes>
               <Route path="/" element={<Home />} />
+
+              <Route path="/search" element={<SearchFound />} />
 
               {/* Rotas públicas */}
               <Route path="/login" element={<Login />} />
@@ -32,6 +38,21 @@ function App() {
                 }
               />
               <Route path="/sneaker/:slug" element={<SneakerDetail />} />
+
+              <Route
+                path="/wishlist"
+                element={
+                  <ProtectedRoute>
+                    <Wishlist />
+                  </ProtectedRoute>
+                }
+              />
+
+              <Route path="/checkout/cart" element={<Cart />} />
+              <Route
+                path="/checkout/identification"
+                element={<Identification />}
+              />
             </Routes>
           </BrowserRouter>
         </CartProvider>

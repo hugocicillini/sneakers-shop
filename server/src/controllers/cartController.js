@@ -3,37 +3,38 @@ import { Cart } from '../models/cartModel.js';
 import { Sneaker } from '../models/sneakerModel.js';
 import { SneakerVariant } from '../models/sneakerVariantModel.js';
 
-// Adicionar item ao carrinho
+// Adicionar item ao carrinho - Versão refatorada
 export const addToCart = async (req, res) => {
   try {
-    // Melhorar o acesso aos dados do corpo da requisição
-    const body = req.body;
-    const sneakerId = body.sneakerId;
-    const variantId = body.variantId;
-    const quantity = body.quantity || 1;
-    const color = body.color;
-    const size = body.size;
+    // Extrair dados do corpo da requisição usando desestruturação
+    const {
+      sneakerId,
+      variantId,
+      quantity = 1,
+      color,
+      size,
+      image,
+      name,
+      price,
+      originalPrice,
+      brand,
+      slug,
+    } = req.body;
+
+    // Criar cartItemId único se não fornecido
     const cartItemId =
-      body.cartItemId || `${sneakerId}-${size}-${color}-${Date.now()}`;
+      req.body.cartItemId || `${sneakerId}-${size}-${color}-${Date.now()}`;
 
-    // Validação mais detalhada para depuração
-    if (!sneakerId) {
+    // Validação simplificada
+    if (!sneakerId || !variantId) {
       return res.status(400).json({
         success: false,
-        message: 'sneakerId é obrigatório',
+        message: 'sneakerId e variantId são obrigatórios',
         receivedBody: req.body,
       });
     }
 
-    if (!variantId) {
-      return res.status(400).json({
-        success: false,
-        message: 'variantId é obrigatório',
-        receivedBody: req.body,
-      });
-    }
-
-    // Verificar se o tênis existe
+    // Verificar se o tênis existe (necessário para adicionar ao banco de dados)
     const sneaker = await Sneaker.findById(sneakerId);
     if (!sneaker) {
       return res.status(404).json({
@@ -43,33 +44,22 @@ export const addToCart = async (req, res) => {
       });
     }
 
-    // Verificar se a variante existe e tem estoque
+    // Verificar se a variante existe (usando variantId diretamente)
     let variant;
-
-    // Tentar encontrar a variante usando o ID
     if (mongoose.Types.ObjectId.isValid(variantId)) {
-      try {
-        variant = await SneakerVariant.findById(variantId);
-      } catch (error) {
-        console.error('Erro ao buscar variante por ID:', error);
-        // Continuar a execução - tentaremos encontrar de outra forma
-      }
+      variant = await SneakerVariant.findById(variantId);
     }
 
-    // Se não encontrou pelo ID, tentar encontrar pelos atributos (tamanho, cor)
+    // Caso não encontre por ID, tentar por tamanho e cor
     if (!variant && size && color) {
-      try {
-        variant = await SneakerVariant.findOne({
-          sneaker: sneakerId,
-          size: size,
-          color: color,
-        });
-      } catch (error) {
-        console.error('Erro ao buscar variante por atributos:', error);
-      }
+      variant = await SneakerVariant.findOne({
+        sneaker: sneakerId,
+        size,
+        color,
+      });
     }
 
-    // Se ainda não encontrou a variante
+    // Se não encontrou a variante
     if (!variant) {
       return res.status(404).json({
         success: false,
@@ -80,14 +70,16 @@ export const addToCart = async (req, res) => {
       });
     }
 
+    // Verificar estoque
     if (variant.stock < quantity) {
       return res.status(400).json({
+        success: false,
         message: 'Quantidade solicitada não disponível em estoque',
         availableStock: variant.stock,
       });
     }
 
-    // Para usuários não autenticados, retornar sucesso para gerenciar localmente
+    // Para usuários não autenticados, retornar dados para armazenamento local
     if (!req.user) {
       return res.status(200).json({
         success: true,
@@ -96,88 +88,82 @@ export const addToCart = async (req, res) => {
           sneakerId,
           variantId,
           quantity,
+          image,
+          price,
+          color,
+          size,
         },
       });
     }
 
-    // Usuário autenticado: salvar no banco de dados
+    // Usuário autenticado: processar adição ao carrinho
     let cart = await Cart.findOne({ user: req.user.id, status: 'active' });
-
     if (!cart) {
       cart = new Cart({ user: req.user.id, items: [] });
     }
 
-    // Melhorar a forma como obtemos a imagem do produto
-    let productImage = '';
+    // Usar a imagem fornecida pelo cliente se disponível, senão buscar do produto
+    const productImage =
+      image ||
+      sneaker.coverImage?.url ||
+      sneaker.colorImages?.find((img) => img.isPrimary)?.url ||
+      sneaker.colorImages?.[0]?.url ||
+      sneaker.images?.find((img) => img.isPrimary)?.url ||
+      sneaker.images?.[0]?.url;
 
-    // Tenta obter a imagem da forma mais completa possível
-    if (sneaker) {
-      // 1. Primeiro tentar coverImage (novo formato)
-      if (sneaker.coverImage && sneaker.coverImage.url) {
-        productImage = sneaker.coverImage.url;
-      }
-      // 2. Depois tenta colorImages (se disponível)
-      else if (sneaker.colorImages && sneaker.colorImages.length > 0) {
-        const primaryImage = sneaker.colorImages.find((img) => img.isPrimary);
-        productImage = primaryImage
-          ? primaryImage.url
-          : sneaker.colorImages[0].url;
-      }
-      // 3. Depois tenta images (formato anterior)
-      else if (sneaker.images && sneaker.images.length > 0) {
-        const primaryImage = sneaker.images.find((img) => img.isPrimary);
-        productImage = primaryImage ? primaryImage.url : sneaker.images[0].url;
-      }
-      // 4. Por último, usa a imagem do item, se fornecida
-      else if (req.body.image) {
-        productImage = req.body.image;
-      }
-    }
-
-    // Se após todas essas tentativas ainda não tiver imagem, retornar erro
     if (!productImage) {
       return res.status(400).json({
         success: false,
-        message: 'Imagem do produto é obrigatória',
+        message: 'Imagem do produto não encontrada',
         sneakerId,
       });
     }
 
-    // Preparar dados do item
-    const price =
+    // Preparar dados do item com valores do cliente quando disponíveis
+    const finalPrice =
+      parseFloat(price) ||
       variant.price ||
-      (sneaker.price ? parseFloat(sneaker.finalPrice || sneaker.price) : 0);
+      parseFloat(sneaker.finalPrice || sneaker.price || 0);
     const cartItem = {
       sneaker: sneakerId,
       variant: variantId,
-      quantity: quantity,
-      price: parseFloat(price),
-      priceAtTimeOfAddition: parseFloat(price),
-      name: sneaker.name,
-      size: variant.size,
-      color: variant.color,
-      brand: sneaker.brand,
-      image: productImage, // Agora temos certeza que há uma imagem aqui
-      slug: sneaker.slug || '',
+      quantity,
+      price: finalPrice,
+      priceAtTimeOfAddition: finalPrice,
+      name: name || sneaker.name,
+      size: size || variant.size,
+      color: color || variant.color,
+      brand: brand || sneaker.brand,
+      image: productImage,
+      slug: slug || sneaker.slug || '',
       cartItemId,
     };
 
-    // Verificar se o item já existe
-    if (cart.hasItem(sneakerId, variantId)) {
-      // Usar o método do schema para atualizar o item
-      const existingItem = cart.findItem(sneakerId, variantId);
-      // MODIFICADO: Somar a quantidade em vez de substituir
-      existingItem.quantity += quantity;
+    // Verificar se item já existe e atualizar ou adicionar novo
+    const existingItemIndex = cart.items.findIndex(
+      (item) =>
+        item.cartItemId === cartItemId ||
+        (item.sneaker.toString() === sneakerId &&
+          item.variant.toString() === variantId)
+    );
+
+    if (existingItemIndex >= 0) {
+      cart.items[existingItemIndex].quantity += quantity;
     } else {
-      // Adicionar novo item
       cart.items.push(cartItem);
     }
 
+    // Recalcular preço total do carrinho
+    cart.totalPrice = cart.items.reduce(
+      (total, item) => total + item.price * item.quantity,
+      0
+    );
+
     await cart.save();
 
-    // Popula os dados do tênis e variante para resposta mais rica
+    // Popular dados para resposta
     await cart.populate([
-      { path: 'items.sneaker', select: 'name brand slug images' },
+      { path: 'items.sneaker', select: 'name brand slug images finalPrice' },
       { path: 'items.variant', select: 'size color price stock' },
     ]);
 
@@ -186,7 +172,7 @@ export const addToCart = async (req, res) => {
       cart,
     });
   } catch (error) {
-    console.error('Erro completo ao adicionar ao carrinho:', error);
+    console.error('Erro ao adicionar ao carrinho:', error);
     res.status(500).json({
       success: false,
       message: 'Erro ao adicionar produto ao carrinho',
@@ -211,7 +197,10 @@ export const getCart = async (req, res) => {
       user: req.user.id,
       status: 'active',
     }).populate([
-      { path: 'items.sneaker', select: 'name brand slug images discount' },
+      {
+        path: 'items.sneaker',
+        select: 'name brand slug finalPrice images discount',
+      },
       { path: 'items.variant', select: 'size color price stock' },
     ]);
 
@@ -272,7 +261,7 @@ export const updateItemQuantity = async (req, res) => {
     }
 
     // Verificar estoque antes de atualizar
-    const variant = await SneakersVariant.findById(item.variant);
+    const variant = await SneakerVariant.findById(item.variant);
     if (variant && variant.stock < quantity) {
       return res.status(400).json({
         success: false,
@@ -305,7 +294,7 @@ export const updateItemQuantity = async (req, res) => {
   }
 };
 
-// Remover item do carrinho
+// Remover item do carrinho - Versão melhorada
 export const removeFromCart = async (req, res) => {
   try {
     const { cartItemId } = req.params;
@@ -319,18 +308,23 @@ export const removeFromCart = async (req, res) => {
       });
     }
 
-    // Lógica para usuários logados
-    const cart = await Cart.findOne({ user: req.user.id, status: 'active' });
+    // Lógica para usuários logados - encontrar todos os carrinhos do usuário
+    const userCarts = await Cart.find({
+      user: req.user.id,
+    });
 
-    if (!cart) {
+    // Encontrar o carrinho ativo
+    const activeCart = userCarts.find((cart) => cart.status === 'active');
+
+    if (!activeCart) {
       return res.status(404).json({
         success: false,
-        message: 'Carrinho não encontrado',
+        message: 'Carrinho ativo não encontrado',
       });
     }
 
     // Encontrar índice do item pelo cartItemId
-    const itemIndex = cart.items.findIndex(
+    const itemIndex = activeCart.items.findIndex(
       (item) => item.cartItemId === cartItemId
     );
 
@@ -342,28 +336,37 @@ export const removeFromCart = async (req, res) => {
     }
 
     // Remover o item
-    cart.items.splice(itemIndex, 1);
+    activeCart.items.splice(itemIndex, 1);
 
-    // Se o carrinho ficar vazio, marcar como abandonado em vez de excluir
-    if (cart.items.length === 0) {
-      cart.status = 'abandoned';
+    // Atualizar o valor total do carrinho
+    activeCart.totalPrice = activeCart.items.reduce(
+      (total, item) => total + item.price * item.quantity,
+      0
+    );
+
+    // Se o carrinho ficar vazio, apenas marcar como abandonado (sem excluir histórico)
+    if (activeCart.items.length === 0) {
+      // Marcar o carrinho atual como abandonado mas manter no banco de dados
+      activeCart.status = 'abandoned';
+      console.log(`Carrinho ${activeCart._id} marcado como abandonado`);
     }
 
-    await cart.save();
+    await activeCart.save();
 
-    if (cart.items.length > 0) {
-      await cart.populate([
-        { path: 'items.sneaker', select: 'name brand slug images' },
+    // Popular dados para resposta se o carrinho ainda tiver itens
+    if (activeCart.items.length > 0) {
+      await activeCart.populate([
+        { path: 'items.sneaker', select: 'name brand slug images finalPrice' },
         { path: 'items.variant', select: 'size color price stock' },
       ]);
     }
 
     res.status(200).json({
       success: true,
-      message: cart.items.length
+      message: activeCart.items.length
         ? 'Item removido do carrinho'
         : 'Carrinho esvaziado',
-      cart,
+      cart: activeCart,
     });
   } catch (error) {
     console.error('Erro ao remover item:', error);
@@ -371,6 +374,7 @@ export const removeFromCart = async (req, res) => {
       success: false,
       message: 'Erro ao remover item do carrinho',
       error: error.message,
+      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined,
     });
   }
 };
@@ -449,7 +453,7 @@ export const syncCart = async (req, res) => {
       // Verificar se o tênis e a variante existem
       const [sneaker, variant] = await Promise.all([
         Sneaker.findById(sneakerId),
-        SneakersVariant.findById(variantId),
+        SneakerVariant.findById(variantId),
       ]);
 
       if (!sneaker || !variant) continue;

@@ -54,12 +54,12 @@ export const getReviewById = async (req, res) => {
  */
 export const getSneakerReviews = async (req, res) => {
   const { sneakerId } = req.params;
+
   const page = parseInt(req.query.page) || 1;
-  const limit = parseInt(req.query.limit) || 10; // Por padrão, busca 10 reviews por vez
-  const skip = (page - 1) * limit; // Calcula quantos reviews pular (paginação)
+  const limit = parseInt(req.query.limit) || 10;
+  const skip = (page - 1) * limit;
   const sort = req.query.sort || 'recent';
 
-  // Verificar se o sneaker existe
   const sneakerExists = await Sneaker.findById(sneakerId);
   if (!sneakerExists) {
     res.status(404);
@@ -84,7 +84,8 @@ export const getSneakerReviews = async (req, res) => {
 
   // Esta é a parte que implementa a paginação (10 em 10)
   const reviews = await Review.find({ sneaker: sneakerId })
-    .populate('user', 'name')
+    .select('-__v')
+    .populate('user', 'name -userType')
     .sort(sortOption)
     .skip(skip) // Pula os reviews já carregados
     .limit(limit); // Limita a 10 reviews por página
@@ -129,7 +130,7 @@ export const createReview = async (req, res) => {
 
   // Verificar se o sneaker existe
   const sneaker = await Sneaker.findById(sneakerId);
-  
+
   if (!sneaker) {
     res.status(404);
     throw new Error(`Produto não encontrado com o ID: ${sneakerId}`);
@@ -156,7 +157,7 @@ export const createReview = async (req, res) => {
   });
 
   const createdReview = await review.save();
-  
+
   // O middleware post-save no model do review atualizará a média de avaliação do sneaker
 
   res.status(201).json(createdReview);

@@ -17,8 +17,15 @@ const Login = () => {
   const navigate = useNavigate();
   const location = useLocation();
 
-  // Obter o caminho anterior para redirecionar após o login
-  const from = location.state?.from?.pathname || '/';
+  // Versão corrigida para garantir que o caminho comece com barra
+  const searchParams = new URLSearchParams(location.search);
+  const redirectUrl = searchParams.get('redirect');
+
+  // Garantir que o caminho comece com barra (/) para ser absoluto
+  let from = location.state?.from?.pathname || '/';
+  if (redirectUrl) {
+    from = redirectUrl.startsWith('/') ? redirectUrl : `/${redirectUrl}`;
+  }
 
   const handleSubmit = async (e) => {
     e.preventDefault();

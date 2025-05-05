@@ -128,10 +128,10 @@ function mapSortByToBackend(sortBy) {
   }
 }
 
-export const getSneakerBySlug = async (slug) => {
+export const getSneakerBySlug = async (slug, color) => {
   // Atualização para usar URL base da variável de ambiente e popular variantes/reviews
   const response = await fetch(
-    `${import.meta.env.VITE_API_URL}/api/sneakers/${slug}`,
+    `${import.meta.env.VITE_API_URL}/api/sneakers/${slug}?color=${encodeURIComponent(color)}`,
     {
       method: 'GET',
       headers: {

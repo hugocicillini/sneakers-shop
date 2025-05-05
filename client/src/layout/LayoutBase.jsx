@@ -77,7 +77,7 @@ const LayoutBase = ({ children, search, setSearch }) => {
           {/* Ícones à direita em mobile, Menu completo em desktop */}
           <div className="flex md:hidden items-center gap-3">
             <div className="relative">
-              <Link to="/favorites">
+              <Link to="/wishlist">
                 <Heart size={24} />
                 <span className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full h-5 w-5 flex items-center justify-center text-xs">
                   {wishlistCount}
@@ -85,7 +85,7 @@ const LayoutBase = ({ children, search, setSearch }) => {
               </Link>
             </div>
             <div className="relative">
-              <Link to="/cart">
+              <Link to="/checkout/cart">
                 <ShoppingBag size={24} />
                 <span className="absolute -top-2 -right-2 bg-black text-white rounded-full h-5 w-5 flex items-center justify-center text-xs">
                   1
@@ -132,7 +132,7 @@ const LayoutBase = ({ children, search, setSearch }) => {
                 </Link>
               </div>
             )}
-            <Link to="/favorites" className="flex items-center gap-1 relative">
+            <Link to="/wishlist" className="flex items-center gap-1 relative">
               <Button variant="outline">
                 <Heart />
                 Favoritos
@@ -143,7 +143,10 @@ const LayoutBase = ({ children, search, setSearch }) => {
                 )}{' '}
               </Button>
             </Link>
-            <Link to="/cart" className="flex items-center gap-1 relative">
+            <Link
+              to="/checkout/cart"
+              className="flex items-center gap-1 relative"
+            >
               <Button variant="outline">
                 <ShoppingBag />
                 Carrinho
@@ -225,14 +228,14 @@ const LayoutBase = ({ children, search, setSearch }) => {
             </>
           )}
           <Link
-            to="/favorites"
+            to="/wishlist"
             className="w-full px-8 py-3 text-black"
             onClick={() => setIsMenuOpen(false)}
           >
             Favoritos
           </Link>
           <Link
-            to="/cart"
+            to="/checkout/cart"
             className="w-full px-8 py-3 text-black"
             onClick={() => setIsMenuOpen(false)}
           >

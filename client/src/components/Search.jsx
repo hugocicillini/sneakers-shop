@@ -2,20 +2,25 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { SearchIcon, XIcon } from 'lucide-react';
 import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 
 const Search = ({ search, setSearch }) => {
   const [inputValue, setInputValue] = useState(search || '');
+
+  const navigate = useNavigate();
 
   useEffect(() => {
     setInputValue(search || '');
   }, [search]);
 
   const handleSearch = () => {
+    navigate('/search?q=' + encodeURIComponent(inputValue));
     setSearch(inputValue);
   };
 
   const handleKeyDown = (e) => {
     if (e.key === 'Enter') {
+      navigate('/search?q=' + encodeURIComponent(inputValue));
       setSearch(inputValue);
     }
   };
@@ -23,6 +28,7 @@ const Search = ({ search, setSearch }) => {
   const clearSearch = () => {
     setInputValue('');
     setSearch('');
+    navigate('/search?q='); // Redireciona para a página de pesquisa sem resultados
   };
 
   return (

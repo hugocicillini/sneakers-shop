@@ -10,12 +10,21 @@ import { getSneakerBySlug } from '@/services/sneakers.service';
 import { StarFilledIcon } from '@radix-ui/react-icons';
 import { Heart, ShoppingBagIcon } from 'lucide-react';
 import { useEffect, useState } from 'react';
-import { useParams } from 'react-router-dom';
+import { useLocation, useParams } from 'react-router-dom';
 
 import CarouselSneakers from '@/components/CarouselSneakers';
 
 const SneakerDetail = () => {
   const { slug } = useParams();
+  const location = useLocation();
+
+  function getQueryParam(param) {
+    const params = new URLSearchParams(location.search);
+    return params.get(param);
+  }
+
+  const colorParam = getQueryParam('color');
+
   const [sneaker, setSneaker] = useState(null);
   const [loading, setLoading] = useState(true);
   const [selectedImage, setSelectedImage] = useState(null);
@@ -23,7 +32,12 @@ const SneakerDetail = () => {
   const [selectedColor, setSelectedColor] = useState(null);
   const [colorImages, setColorImages] = useState([]);
   const [quantity, setQuantity] = useState(1);
-  const [finalPrice, setFinalPrice] = useState(0);
+  // Alterado para armazenar tanto preço original quanto com desconto
+  const [selectedPrice, setSelectedPrice] = useState({
+    originalPrice: 0,
+    finalPrice: 0,
+    discount: 0,
+  });
 
   // Usando os contexts
   const { isAuthenticated } = useAuth();
@@ -34,43 +48,32 @@ const SneakerDetail = () => {
     const fetchSneaker = async () => {
       try {
         setLoading(true);
-
-        // Obter dados reais da API
-        const sneakerData = await getSneakerBySlug(slug);
+        const sneakerData = await getSneakerBySlug(slug, colorParam);
         setSneaker(sneakerData);
 
-        // Calcular preço com desconto
-        if (sneakerData.basePrice && sneakerData.baseDiscount) {
-          const discountedPrice =
-            sneakerData.basePrice * (1 - sneakerData.baseDiscount / 100);
-          setFinalPrice(discountedPrice.toFixed(2));
-        } else {
-          setFinalPrice(sneakerData.basePrice?.toFixed(2) || '0.00');
-        }
+        // Usar a cor selecionada que vem do backend
+        setSelectedColor(sneakerData.selectedColor);
 
-        // Usar a cor padrão
-        if (sneakerData.defaultColor) {
-          setSelectedColor(sneakerData.defaultColor);
-        } else if (
-          sneakerData.colorVariants &&
-          sneakerData.colorVariants.length > 0
-        ) {
-          setSelectedColor(sneakerData.colorVariants[0].color);
-        } else if (
-          sneakerData.availableColors &&
-          sneakerData.availableColors.length > 0
-        ) {
-          setSelectedColor(sneakerData.availableColors[0].color);
-        }
+        // Configurar o preço base do produto
+        setSelectedPrice({
+          originalPrice: sneakerData.basePrice,
+          finalPrice: sneakerData.finalPrice,
+          discount: sneakerData.baseDiscount,
+        });
 
-        // Configurar a imagem principal
-        if (sneakerData.coverImage && sneakerData.coverImage.url) {
-          setSelectedImage(sneakerData.coverImage.url);
-        }
-
-        // Configurar imagens da cor
+        // Configurar imagens da cor selecionada
         if (sneakerData.colorImages && sneakerData.colorImages.length > 0) {
           setColorImages(sneakerData.colorImages);
+
+          // Selecionar a primeira imagem como imagem principal (ou a marcada como primária)
+          const primaryImage = sneakerData.colorImages.find(
+            (img) => img.isPrimary
+          );
+          setSelectedImage(
+            primaryImage?.url || sneakerData.colorImages[0]?.url
+          );
+        } else if (sneakerData.coverImage) {
+          setSelectedImage(sneakerData.coverImage.url);
         }
 
         setLoading(false);
@@ -81,7 +84,7 @@ const SneakerDetail = () => {
     };
 
     fetchSneaker();
-  }, [slug]);
+  }, [slug, colorParam]);
 
   const handleImageChange = (imageUrl) => {
     setSelectedImage(imageUrl);
@@ -89,21 +92,35 @@ const SneakerDetail = () => {
 
   const handleSizeSelect = (size) => {
     setSelectedSize(size);
+
+    // Atualizar o preço com base no tamanho selecionado
+    if (sneaker && sneaker.sizesInStock) {
+      const sizeData = sneaker.sizesInStock.find((item) => item.size === size);
+
+      if (sizeData) {
+        // Atualizar para o preço específico do tamanho
+        setSelectedPrice({
+          originalPrice: sizeData.price,
+          finalPrice: sizeData.finalPrice,
+          discount: sizeData.discount || 0,
+        });
+      } else {
+        // Reverter para o preço base do produto
+        setSelectedPrice({
+          originalPrice: sneaker.basePrice,
+          finalPrice: sneaker.finalPrice,
+          discount: sneaker.baseDiscount,
+        });
+      }
+    }
   };
 
   const handleColorSelect = (color) => {
-    setSelectedColor(color);
-
-    // Tentar encontrar imagens para essa cor
-    if (sneaker && sneaker.colorVariants) {
-      const colorVariant = sneaker.colorVariants.find(
-        (cv) => cv.color === color
-      );
-
-      if (colorVariant) {
-        // Aqui você pode carregar as imagens específicas dessa cor
-        // como seu backend ainda não fornece isso diretamente
-      }
+    if (color !== selectedColor) {
+      // Atualiza a URL e recarrega a página com a nova cor
+      window.location.href = `/sneaker/${slug}?color=${encodeURIComponent(
+        color.toLowerCase()
+      )}`;
     }
   };
 
@@ -122,7 +139,7 @@ const SneakerDetail = () => {
     }
 
     // Encontrar o tamanho selecionado na lista de tamanhos disponíveis
-    const sizeData = sneaker.availableSizes?.find(
+    const sizeData = sneaker.sizesInStock.find(
       (item) => item.size === parseInt(selectedSize)
     );
 
@@ -139,25 +156,19 @@ const SneakerDetail = () => {
     const cartItem = {
       sneakerId: sneaker._id,
       sizeId: sizeData.id,
-      colorId: sneaker.colorVariants.find((cv) => cv.color === selectedColor)
-        ?.id,
       name: sneaker.name,
-      price: parseFloat(
-        sizeData.discount
-          ? sizeData.price * (1 - sizeData.discount / 100)
-          : sizeData.price
-      ),
+      price: sizeData.finalPrice,
       originalPrice: sizeData.price,
       size: selectedSize,
       color: selectedColor,
       quantity: quantity,
-      image:
-        (colorImages.length > 0 &&
-          colorImages.find((img) => img.isPrimary)?.url) ||
-        sneaker.coverImage?.url,
+      image: selectedImage || sneaker.coverImage?.url,
       brand: sneaker.brand?.name || '',
       slug: sneaker.slug,
+      variantId: sizeData.id,
     };
+
+    console.log(cartItem);
 
     // Adicionar ao carrinho
     addItem(cartItem);
@@ -168,7 +179,7 @@ const SneakerDetail = () => {
       variant: 'default',
     });
 
-    // Abrir o carrinho para mostrar o que foi adicionado (opcional)
+    // Abrir o carrinho para mostrar o que foi adicionado
     setTimeout(() => toggleCart(), 300);
   };
 
@@ -219,17 +230,21 @@ const SneakerDetail = () => {
     );
   }
 
-  // Extrair cores dos colorVariants para exibição
-  const colors =
-    sneaker.colorVariants?.map((cv) => cv.color) ||
-    sneaker.availableColors?.map((ac) => ac.color) ||
-    [];
+  const colors = sneaker.availableColors?.map((ac) => ac.color) || [];
 
-  // Extrair tamanhos dos availableSizes
-  const sizes = sneaker.availableSizes?.map((item) => item.size) || [];
+  // Determinar quais cores estão em estoque
+  const colorsInStock = sneaker.colorsInStock || [];
 
-  // Verificar se há variantes
-  const variants = sneaker.variants || [];
+  // Para os tamanhos, usar todos os tamanhos disponíveis do produto
+  const allSizes = sneaker.availableSizes || [];
+
+  // Função para formatar preço no padrão brasileiro (com vírgula)
+  const formatPrice = (value) => {
+    return new Intl.NumberFormat('pt-BR', {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    }).format(value);
+  };
 
   return (
     <LayoutBase>
@@ -239,25 +254,23 @@ const SneakerDetail = () => {
           <div className="flex flex-col md:flex-row gap-4">
             {/* Miniaturas laterais */}
             <div className="flex md:flex-col gap-2 order-2 md:order-1">
-              {(colorImages.length > 0 ? colorImages : []).map(
-                (image, index) => (
-                  <div
-                    key={index}
-                    onClick={() => handleImageChange(image.url)}
-                    className={`w-16 h-16 cursor-pointer border-2 rounded overflow-hidden ${
-                      selectedImage === image.url
-                        ? 'border-primary'
-                        : 'border-gray-200'
-                    }`}
-                  >
-                    <img
-                      src={image.url}
-                      alt={image.alt || sneaker.name}
-                      className="w-full h-full object-cover"
-                    />
-                  </div>
-                )
-              )}
+              {colorImages.map((image, index) => (
+                <div
+                  key={index}
+                  onClick={() => handleImageChange(image.url)}
+                  className={`w-16 h-16 cursor-pointer border-2 rounded overflow-hidden ${
+                    selectedImage === image.url
+                      ? 'border-primary'
+                      : 'border-gray-200'
+                  }`}
+                >
+                  <img
+                    src={image.url}
+                    alt={image.alt || sneaker.name}
+                    className="w-full h-full object-cover"
+                  />
+                </div>
+              ))}
             </div>
 
             {/* Imagem principal */}
@@ -335,23 +348,23 @@ const SneakerDetail = () => {
               </a>
             </div>
 
-            {/* Preço */}
+            {/* Preço - Agora usando o preço do tamanho selecionado e formatação brasileira */}
             <div className="flex items-center space-x-3">
-              {sneaker.baseDiscount > 0 ? (
+              {selectedPrice.discount > 0 ? (
                 <>
                   <span className="text-3xl font-bold text-primary">
-                    R$ {finalPrice}
+                    R$ {formatPrice(selectedPrice.finalPrice)}
                   </span>
                   <span className="text-lg text-gray-500 line-through">
-                    R$ {sneaker.basePrice?.toFixed(2)}
+                    R$ {formatPrice(selectedPrice.originalPrice)}
                   </span>
                   <span className="bg-red-500 text-white text-sm py-0.5 px-2 rounded-full">
-                    -{sneaker.baseDiscount}%
+                    -{selectedPrice.discount}%
                   </span>
                 </>
               ) : (
                 <span className="text-3xl font-bold text-primary">
-                  R$ {sneaker.basePrice?.toFixed(2)}
+                  R$ {formatPrice(selectedPrice.finalPrice)}
                 </span>
               )}
             </div>
@@ -360,21 +373,25 @@ const SneakerDetail = () => {
             <div>
               <h3 className="text-lg font-semibold mb-2">Cor</h3>
               <div className="flex flex-wrap gap-2">
-                {colors.map((color) => {
-                  // Encontrar o colorVariant correspondente
-                  const colorVariant = sneaker.colorVariants?.find(
-                    (cv) => cv.color === color
+                {sneaker.availableColors.map((colorInfo) => {
+                  const isAvailable = colorsInStock.some(
+                    (c) => c.toLowerCase() === colorInfo.color.toLowerCase()
                   );
 
-                  const isAvailable = colorVariant?.hasStock !== false;
+                  // Verificação case-insensitive para determinar a cor selecionada
+                  const isSelected =
+                    selectedColor?.toLowerCase() ===
+                    colorInfo.color.toLowerCase();
 
                   return (
                     <button
-                      key={color}
-                      onClick={() => isAvailable && handleColorSelect(color)}
+                      key={colorInfo.color}
+                      onClick={() =>
+                        isAvailable && handleColorSelect(colorInfo.color)
+                      }
                       disabled={!isAvailable}
                       className={`px-4 py-2 rounded-md border relative overflow-hidden ${
-                        selectedColor === color
+                        isSelected
                           ? 'border-primary bg-primary/10 text-primary'
                           : isAvailable
                           ? 'border-gray-300 hover:border-gray-400'
@@ -390,25 +407,26 @@ const SneakerDetail = () => {
                           }}
                         />
                       )}
-                      <span className="relative z-10">{color}</span>
+                      <span className="relative z-10">
+                        {colorInfo.colorName || colorInfo.color}
+                      </span>
                     </button>
                   );
                 })}
               </div>
             </div>
 
-            {/* Seleção de tamanho */}
+            {/* Seleção de tamanho - mostrar todos os tamanhos disponíveis */}
             <div>
               <h3 className="text-lg font-semibold mb-2">Tamanho</h3>
-              {sizes.length > 0 ? (
+              {allSizes.length > 0 ? (
                 <div className="flex flex-wrap gap-2">
-                  {sizes.map((size) => {
+                  {allSizes.map((size) => {
                     // Verificar se o tamanho está disponível para a cor selecionada
-                    const sizeData = sneaker.availableSizes.find(
+                    const sizeData = sneaker.sizesInStock?.find(
                       (item) => item.size === size
                     );
-
-                    const isAvailable = sizeData && sizeData.stock > 0;
+                    const isAvailable = Boolean(sizeData?.isAvailable);
 
                     return (
                       <button
@@ -482,14 +500,6 @@ const SneakerDetail = () => {
               >
                 <ShoppingBagIcon className="w-5 h-5 mr-2" />
                 <span>Adicionar ao carrinho</span>
-              </Button>
-
-              <Button
-                variant="secondary"
-                className="w-full mt-2 py-6"
-                size="lg"
-              >
-                Comprar agora
               </Button>
             </div>
           </div>

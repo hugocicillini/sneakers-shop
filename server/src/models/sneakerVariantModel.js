@@ -33,6 +33,11 @@ const sneakerVariantSchema = new mongoose.Schema(
       min: 0,
       max: 100,
     },
+    // Preço final (calculado automaticamente)
+    finalPrice: {
+      type: Number,
+      min: 0,
+    },
     stock: {
       type: Number,
       required: true,
@@ -50,43 +55,124 @@ const sneakerVariantSchema = new mongoose.Schema(
   },
   {
     timestamps: true,
-    collection: 'sneakerVariants', // Nome da coleção no MongoDB
+    collection: 'sneakerVariants',
     toJSON: { virtuals: true },
     toObject: { virtuals: true },
   }
 );
 
-// Virtual para calcular o preço final
-sneakerVariantSchema.virtual('finalPrice').get(async function () {
+// Middleware para calcular o finalPrice antes de validar
+sneakerVariantSchema.pre('validate', async function (next) {
   try {
-    const price = this.price || 0;
+    // Se finalPrice foi fornecido diretamente e discount não foi modificado
+    if (
+      this.isModified('finalPrice') &&
+      !this.isModified('discount') &&
+      this.price
+    ) {
+      // Se o finalPrice é maior ou igual ao price, não há desconto
+      if (this.finalPrice >= this.price) {
+        this.discount = 0;
+      } else {
+        // Calcular desconto baseado no preço final fornecido
+        const discountPercentage =
+          ((this.price - this.finalPrice) / this.price) * 100;
+        this.discount = parseFloat(discountPercentage.toFixed(2));
+      }
+    }
+    next();
+  } catch (error) {
+    next(error);
+  }
+});
+
+// Middleware para calcular o finalPrice antes de salvar
+sneakerVariantSchema.pre('save', async function (next) {
+  try {
+    // Calcular o finalPrice se price ou discount foram modificados
+    if (this.isModified('price') || this.isModified('discount')) {
+      await this.calculateFinalPrice();
+    }
+    next();
+  } catch (error) {
+    next(error);
+  }
+});
+
+// Método para calcular e atualizar o preço final
+sneakerVariantSchema.methods.calculateFinalPrice = async function () {
+  try {
+    const price = this.price;
     const discount = this.discount;
 
-    // Se não tiver preço próprio ou desconto, buscar do produto principal
-    if (!price || discount === undefined) {
+    // Se tiver preço e desconto próprios
+    if (price !== undefined && price > 0 && discount !== undefined) {
+      this.finalPrice =
+        discount > 0
+          ? parseFloat((price * (1 - discount / 100)).toFixed(2))
+          : price;
+    }
+    // Se não tiver preço ou desconto, buscar do produto principal
+    else {
       const Sneaker = mongoose.model('Sneaker');
       const sneaker = await Sneaker.findById(this.sneaker);
 
       if (sneaker) {
-        const variantPrice = price || sneaker.basePrice;
+        const variantPrice =
+          price !== undefined && price > 0 ? price : sneaker.basePrice;
         const variantDiscount =
           discount !== undefined ? discount : sneaker.baseDiscount;
 
-        return variantDiscount > 0
-          ? (variantPrice * (1 - variantDiscount / 100)).toFixed(2)
-          : variantPrice.toFixed(2);
+        this.finalPrice =
+          variantDiscount > 0
+            ? parseFloat(
+                (variantPrice * (1 - variantDiscount / 100)).toFixed(2)
+              )
+            : variantPrice;
+      } else {
+        this.finalPrice = price || 0;
       }
     }
 
-    // Se tiver preço e desconto próprios
-    return discount > 0
-      ? (price * (1 - discount / 100)).toFixed(2)
-      : price.toFixed(2);
+    return this.finalPrice;
   } catch (error) {
     console.error('Erro ao calcular preço final:', error);
     return 0;
   }
-});
+};
+
+// Método para definir o preço final diretamente (e calcular o desconto)
+sneakerVariantSchema.methods.setFinalPrice = async function (finalPrice) {
+  if (!finalPrice || finalPrice <= 0) return false;
+
+  try {
+    // Determinar o preço base para cálculo do desconto
+    let basePrice = this.price;
+
+    // Se não tiver preço próprio, buscar do produto principal
+    if (!basePrice) {
+      const Sneaker = mongoose.model('Sneaker');
+      const sneaker = await Sneaker.findById(this.sneaker);
+      basePrice = sneaker ? sneaker.basePrice : 0;
+    }
+
+    if (!basePrice || basePrice <= 0) return false;
+
+    // Calcular e definir o desconto apropriado
+    if (finalPrice >= basePrice) {
+      this.discount = 0;
+    } else {
+      const discountPercentage = ((basePrice - finalPrice) / basePrice) * 100;
+      this.discount = parseFloat(discountPercentage.toFixed(2));
+    }
+
+    this.finalPrice = parseFloat(finalPrice.toFixed(2));
+    return true;
+  } catch (error) {
+    console.error('Erro ao definir preço final:', error);
+    return false;
+  }
+};
 
 // Validação para garantir SKU único
 sneakerVariantSchema.pre('save', async function (next) {

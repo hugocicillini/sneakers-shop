@@ -10,9 +10,8 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { useAuth } from '@/contexts/AuthContext';
 import { Edit } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 
 const ProfileDialog = ({ onUserUpdated, userData, setUserData }) => {
   const [open, setOpen] = useState(false);
@@ -22,6 +21,17 @@ const ProfileDialog = ({ onUserUpdated, userData, setUserData }) => {
     phone: userData?.phone || '',
   });
   const [isLoading, setIsLoading] = useState(false);
+
+  // Atualizar o formData quando o userData mudar ou quando o diálogo for aberto
+  useEffect(() => {
+    if (userData && open) {
+      setFormData({
+        name: userData.name || '',
+        email: userData.email || '',
+        phone: userData.phone || '',
+      });
+    }
+  }, [userData, open]);
 
   const handleChange = (e) => {
     const { name, value } = e.target;

@@ -76,6 +76,13 @@ const CarouselSneakers = ({
     };
   }, [emblaApi, onSelect]);
 
+  const formatPrice = (value) => {
+    return new Intl.NumberFormat('pt-BR', {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    }).format(value);
+  };
+
   useEffect(() => {
     // Verifica se os sneakers são apenas IDs (strings) ou objetos completos
     const areOnlyIds = sneakers.length > 0 && typeof sneakers[0] === 'string';
@@ -122,7 +129,7 @@ const CarouselSneakers = ({
   }
 
   return (
-    <div>
+    <div className='select-none'>
       {/* Cabeçalho com título e controles de navegação */}
       <div className="flex justify-between items-center mb-6">
         <h3 className="text-xl font-semibold">{title}</h3>
@@ -138,55 +145,55 @@ const CarouselSneakers = ({
           {sneakersData.map((sneaker) => (
             <div
               key={sneaker._id}
-              className="flex-shrink-0 pl-0 mr-4"
+              className="flex-shrink-0 pl-0 pb-6 mr-4"
               style={{
                 flex: `0 0 ${cardWidth}px`,
                 minWidth: 0,
               }}
             >
-              <Link to={`/sneaker/${sneaker.slug}`}>
-                <Card className="h-full overflow-hidden hover:shadow-md transition-shadow duration-200">
-                  <div className="relative h-[150px] overflow-hidden bg-gray-100">
+              {/* Modificar o Link para forçar um novo carregamento da página */}
+              <Link
+                onClick={(e) => {
+                  e.preventDefault();
+                  // Forçar uma navegação completa para garantir que o componente seja remontado
+                  window.location.href = `/sneaker/${sneaker.slug}`;
+                }}
+              >
+                <Card className="h-full overflow-hidden hover:shadow-md transition-shadow duration-200 border border-gray-100">
+                  <div className="relative h-[200px] overflow-hidden bg-gray-50">
                     <img
                       src={
                         (sneaker.coverImage && sneaker.coverImage.url) ||
                         '/placeholder-image.jpg'
                       }
                       alt={sneaker.name}
-                      className="object-cover w-full h-full"
+                      className="object-cover w-full h-full hover:scale-105 transition-transform duration-300"
                     />
-                    {/* Usar baseDiscount em vez de discount */}
-                    {sneaker.baseDiscount > 0 && (
-                      <Badge
-                        className="absolute top-2 right-2 bg-red-500"
-                        variant="destructive"
-                      >
-                        -{sneaker.baseDiscount}%
-                      </Badge>
-                    )}
+                    {/* Badge de desconto removido daqui */}
                   </div>
-                  <CardHeader className="p-4">
-                    <CardTitle className="text-sm font-medium line-clamp-2">
+                  <CardHeader className="p-3 pb-4">
+                    <CardTitle className="text-sm font-medium line-clamp-2 h-10">
                       {sneaker.name}
                     </CardTitle>
                     <p className="text-xs text-gray-500">
-                      {/* Verificar se brand é um objeto ou um ID */}
                       {sneaker.brand.name}
                     </p>
                   </CardHeader>
-                  <CardFooter className="p-4 pt-0 flex justify-between">
+                  <CardFooter className="p-3 pt-0 flex justify-between items-center">
                     <div className="flex flex-col">
-                      {/* Usar baseDiscount e basePrice em vez de discount e price */}
                       {sneaker.baseDiscount > 0 ? (
                         <>
-                          <span className="font-semibold text-primary">
-                            R${' '}
-                            {sneaker.finalPrice ||
-                              (
-                                sneaker.basePrice *
-                                (1 - sneaker.baseDiscount / 100)
-                              ).toFixed(2)}
-                          </span>
+                          <div className="flex items-center">
+                            <span className="font-semibold text-primary">
+                              R$ {formatPrice(sneaker.finalPrice)}
+                            </span>
+                            <Badge
+                              className="bg-red-500 text-xs h-5 px-1.5 ml-2"
+                              variant="destructive"
+                            >
+                              -{sneaker.baseDiscount}%
+                            </Badge>
+                          </div>
                           <span className="text-xs text-gray-500 line-through">
                             R$ {sneaker.basePrice?.toFixed(2)}
                           </span>
@@ -197,9 +204,9 @@ const CarouselSneakers = ({
                         </span>
                       )}
                     </div>
-                    <div className="flex items-center">
-                      <StarFilledIcon className="h-4 w-4 text-yellow-400 mr-1" />
-                      <span className="text-xs">
+                    <div className="flex items-center bg-gray-50 px-1.5 py-0.5 rounded">
+                      <StarFilledIcon className="h-3 w-3 text-yellow-500 mr-0.5" />
+                      <span className="text-xs font-medium">
                         {sneaker.rating?.toFixed(1) || '0.0'}
                       </span>
                     </div>

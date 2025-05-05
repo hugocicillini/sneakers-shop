@@ -1,6 +1,6 @@
 import { Client } from '../models/clientModel.js';
 import { Sneaker } from '../models/sneakerModel.js';
-
+import { SneakerVariant } from '../models/sneakerVariantModel.js';
 // Adicionar um tênis aos favoritos
 export const addFavorite = async (req, res) => {
   try {
@@ -54,10 +54,16 @@ export const addFavorite = async (req, res) => {
 // Obtém os favoritos do usuário autenticado
 export const getFavorites = async (req, res) => {
   try {
-    const userId = req.user._id; // Usando ID do middleware
+    const userId = req.user._id;
 
-    // Buscar cliente com wishlist populada
-    const client = await Client.findById(userId).populate('wishlist');
+    // Buscar cliente com wishlist populada, incluindo a marca de cada tênis
+    const client = await Client.findById(userId).populate({
+      path: 'wishlist',
+      populate: {
+        path: 'brand',
+        select: 'name slug logo', // Selecionar os campos da marca que precisamos
+      },
+    });
 
     if (!client) {
       return res.status(404).json({
@@ -66,9 +72,31 @@ export const getFavorites = async (req, res) => {
       });
     }
 
+    // Para cada sneaker, buscar as variantes diretamente
+    const wishlistWithVariants = await Promise.all(
+      (client.wishlist || []).map(async (sneaker) => {
+        const variants = await SneakerVariant.find({
+          sneaker: sneaker._id,
+        }).select('size color stock isAvailable');
+        // Extrai as cores das variantes que têm estoque > 0
+        const colorsInStock = [
+          ...new Set(
+            variants
+              .filter((variant) => variant.stock > 0)
+              .map((variant) => variant.color)
+          ),
+        ];
+        return {
+          ...sneaker.toObject(),
+          colorsInStock,
+          sizesInStock: variants,
+        };
+      })
+    );
+
     res.status(200).json({
       success: true,
-      wishlist: client.wishlist || [],
+      wishlist: wishlistWithVariants,
     });
   } catch (error) {
     res.status(500).json({

@@ -10,8 +10,7 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { useAuth } from '@/contexts/AuthContext';
-import { Edit, Edit2, MapPin, Trash2 } from 'lucide-react';
+import { Edit, MapPin, Trash2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
 import {
@@ -39,8 +38,8 @@ const AddressDialog = ({
   onAddressUpdated,
   onAddressDeleted,
   isEditing = false,
+  isInCheckout = false,
 }) => {
-  const { user } = useAuth();
   const { toast } = useToast();
   const [open, setOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
@@ -403,14 +402,16 @@ const AddressDialog = ({
       {/* Botão de exclusão (apenas visível no modo de edição) */}
       {isEditing && (
         <>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => setDeleteDialogOpen(true)}
-            className="text-red-500 hover:text-red-700 hover:bg-red-50"
-          >
-            <Trash2 size={16}  />
-          </Button>
+          {!isInCheckout ? (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setDeleteDialogOpen(true)}
+              className="text-red-500 hover:text-red-700 hover:bg-red-50"
+            >
+              <Trash2 size={16} />
+            </Button>
+          ) : null}
 
           {/* Diálogo de confirmação para exclusão */}
           <AlertDialog

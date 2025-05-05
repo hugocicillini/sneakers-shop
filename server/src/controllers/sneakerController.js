@@ -10,11 +10,47 @@ export const getSneakers = async (req, res) => {
 
     // Filtro por texto (busca em nome ou marca)
     if (req.query.search) {
-      const searchRegex = new RegExp(req.query.search, 'i');
-      filter.$or = [{ name: searchRegex }, { brand: searchRegex }];
+      // Função para remover acentos para melhorar a busca
+      const removeAccents = (str) => {
+        return str.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+      };
+
+      // Termo de busca normalizado (sem acentos)
+      const normalizedSearch = removeAccents(
+        req.query.search.trim()
+      ).toLowerCase();
+
+      // Criar regex para busca parcial - busca por qualquer parte da palavra
+      const searchRegex = new RegExp(normalizedSearch, 'i');
+
+      // Procurar marcas que correspondem ao termo de busca
+      const matchingBrands = await Brand.find({
+        $or: [{ name: searchRegex }, { slug: searchRegex }],
+      });
+
+      // Extrair IDs das marcas encontradas
+      const brandIds = matchingBrands.map((brand) => brand._id);
+
+      // Construir filtro OR para nome de produto, slug, ou marca
+      const orConditions = [
+        // Busca por nome do produto
+        { name: searchRegex },
+        // Busca por slug (que geralmente não tem acentos)
+        { slug: searchRegex },
+        // Busca por descrição curta
+        { shortDescription: searchRegex },
+      ];
+
+      // Adicionar condição para marcas se encontramos alguma
+      if (brandIds.length > 0) {
+        orConditions.push({ brand: { $in: brandIds } });
+      }
+
+      // Aplicar o filtro OR
+      filter.$or = orConditions;
     }
 
-    // Filtro específico por marca
+    // Resto do filtro por marca permanece igual
     if (req.query.brand) {
       const brandNames = req.query.brand.split(',');
 
@@ -123,7 +159,7 @@ export const getSneakers = async (req, res) => {
       .populate('brand', 'name slug logo') // Populate brand info
       .populate('category', 'name slug') // Populate category info
       .select(
-        'name slug basePrice baseDiscount shortDescription coverImage brand category rating reviewCount defaultColor isFeatured'
+        'name slug basePrice baseDiscount shortDescription coverImage finalPrice rating reviewCount defaultColor isFeatured'
       );
 
     return res.status(200).json({
@@ -141,116 +177,108 @@ export const getSneakers = async (req, res) => {
   }
 };
 
-// Quando buscar detalhes de um sneaker específico, limitar a 5 reviews iniciais
+// Função simples para capitalizar a primeira letra
+function capitalizeFirstLetter(string) {
+  if (!string) return '';
+  return string.charAt(0).toUpperCase() + string.slice(1).toLowerCase();
+}
+
 export const getSneakerBySlug = async (req, res) => {
   try {
     const { slug } = req.params;
-    const { color } = req.query; // Cor opcional na URL
+    const { color } = req.query;
 
-    // Buscar o tênis completo
     const sneaker = await Sneaker.findOne({ slug })
       .populate('brand')
       .populate('category')
       .populate({
         path: 'reviews',
-        match: { isVerified: true }, // Adicionar filtro para reviews verificadas
+        match: { isVerified: true },
         select: 'rating comment user date',
         options: { sort: { date: -1 }, limit: 5 },
-      });
+        // Adicionar populate aninhado para trazer os dados do usuário
+        populate: {
+          path: 'user',
+          select: 'name',
+        },
+      })
+      .select('-isFeatured');
 
     if (!sneaker) {
       return res.status(404).json({ message: 'Tênis não encontrado!' });
     }
 
-    // Buscar variantes com uma única consulta para evitar múltiplas chamadas ao banco
     const variants = await SneakerVariant.find({
       sneaker: sneaker._id,
       isActive: true,
-    });
+    }).select('color size stock price discount finalPrice');
 
-    const availableColors = [
-      ...new Set(variants.filter((v) => v.stock > 0).map((v) => v.color)),
+    let selectedColor = null;
+
+    const colorsInStock = [
+      ...new Set(
+        variants.filter((v) => v.stock > 0).map((v) => v.color?.toLowerCase())
+      ),
     ];
 
-    // Determinar a cor a ser usada e verificar disponibilidade
-    let selectedColor;
-    let colorChangeMessage = null;
-
-    if (color) {
-      if (availableColors.includes(color)) {
-        // A cor solicitada está disponível
-        selectedColor = color;
-      } else {
-        // A cor solicitada não está disponível, buscar alternativa
-        const defaultColor = sneaker.getDefaultColor();
-
-        if (availableColors.includes(defaultColor)) {
-          selectedColor = defaultColor;
-        } else if (availableColors.length > 0) {
-          selectedColor = availableColors[0];
-        } else {
-          // Caso extremo: nenhuma cor tem estoque
-          selectedColor = color; // Manter a cor solicitada mesmo sem estoque
-        }
-
-        colorChangeMessage = `A cor ${color} não está disponível. Mostrando ${selectedColor} como alternativa.`;
-      }
+    if (color && colorsInStock.includes(color.toLowerCase())) {
+      selectedColor = capitalizeFirstLetter(color);
+    } else if (colorsInStock.length > 0) {
+      const firstColorVariant = variants.find(
+        (v) => v.stock > 0 && v.color?.toLowerCase() === colorsInStock[0]
+      );
+      selectedColor = firstColorVariant
+        ? capitalizeFirstLetter(firstColorVariant.color)
+        : capitalizeFirstLetter(colorsInStock[0]);
     } else {
-      // Nenhuma cor foi especificada, usar a padrão
-      const defaultColor = sneaker.getDefaultColor();
-
-      if (availableColors.includes(defaultColor)) {
-        selectedColor = defaultColor;
-      } else if (availableColors.length > 0) {
-        selectedColor = availableColors[0];
-      } else {
-        selectedColor = sneaker.availableColors[0]?.color || 'default';
-      }
+      selectedColor = color ? capitalizeFirstLetter(color) : null;
     }
 
-    // Organizar os dados para a resposta
-    // Buscar imagens específicas da cor selecionada
-    const selectedColorImages = sneaker.getImagesByColor(selectedColor);
+    // Filtrar imagens para a cor selecionada
+    const colorImages =
+      sneaker.colorImages?.find(
+        (ci) => ci.color.toLowerCase() === selectedColor?.toLowerCase()
+      )?.images || sneaker.coverImage;
 
-    // Filtrar variantes da cor selecionada que tenham estoque
-    const availableSizes = variants
+    // Obter variantes da cor selecionada com os preços corretos
+    const sizesInStock = variants
       .filter((v) => v.color === selectedColor && v.stock > 0)
       .map((v) => ({
+        id: v._id,
         size: v.size,
         stock: v.stock,
         price: v.price || sneaker.basePrice,
         discount: v.discount !== undefined ? v.discount : sneaker.baseDiscount,
-        id: v._id,
+        finalPrice:
+          v.finalPrice ||
+          (v.price || sneaker.basePrice) *
+            (1 -
+              (v.discount !== undefined ? v.discount : sneaker.baseDiscount) /
+                100),
+        isAvailable: true,
       }))
       .sort((a, b) => a.size - b.size);
 
-    // Preparar informações de cores disponíveis
-    const colorVariants = sneaker.availableColors.map((c) => ({
-      ...(c.toObject ? c.toObject() : c),
-      isSelected: c.color === selectedColor,
-      hasStock: variants.some((v) => v.color === c.color && v.stock > 0),
-    }));
-
-    // Buscar tênis relacionados se existirem
     let relatedSneakers = [];
     if (sneaker.relatedSneakers && sneaker.relatedSneakers.length > 0) {
       relatedSneakers = await Sneaker.find({
         _id: { $in: sneaker.relatedSneakers },
         isActive: true,
       })
-        .select('name basePrice coverImage slug baseDiscount brand rating')
+        .select(
+          'name basePrice coverImage slug baseDiscount finalPrice brand rating'
+        )
         .populate('brand');
     }
 
     // Resposta formatada
     const response = {
       ...sneaker.toObject(),
-      selectedColor,
-      colorImages: selectedColorImages,
-      availableSizes,
-      colorVariants,
+      selectedColor, // Agora com primeira letra maiúscula
+      sizesInStock,
+      colorsInStock,
+      colorImages,
       relatedSneakers,
-      colorChangeMessage,
     };
 
     return res.status(200).json(response);
