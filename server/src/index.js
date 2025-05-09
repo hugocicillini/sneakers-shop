@@ -1,44 +1,30 @@
-import cors from 'cors';
-import 'dotenv/config';
-import express from 'express';
-import mongoose from 'mongoose';
+import app from './app.js';
+import connectDB from './config/db.js';
+import logger from './utils/logger.js';
 
-import { swaggerDocs, swaggerUi } from './config/swagger.js';
+const PORT = process.env.PORT || 5000;
 
-import cartRoute from './routes/cartRoute.js';
-import sneakerRoute from './routes/sneakerRoute.js';
-import userRoute from './routes/userRoute.js';
-import wishlistRoute from './routes/wishlistRoute.js';
-import addressRoute from './routes/addressRoute.js';
-import reviewRoute from './routes/reviewRoute.js';
+// Função para iniciar o servidor
+const startServer = async () => {
+  try {
+    // Conectar ao MongoDB
+    await connectDB();
 
-const app = express();
+    // Iniciar o servidor Express
+    app.listen(PORT, () => {
+      logger.info(`Server started on: http://localhost:${PORT}`);
+      logger.info(`Documentation available at: http://localhost:${PORT}/docs`);
+    });
+  } catch (error) {
+    logger.error(`Failed to start server: ${error.message}`);
+    process.exit(1);
+  }
+};
 
-app.use(express.json());
-app.use(cors());
-
-app.use('/docs', swaggerUi.serve, swaggerUi.setup(swaggerDocs));
-
-app.get('/', (req, res) => {
-  return res.status(200).send('Server running!');
+// Lidar com erros não tratados
+process.on('unhandledRejection', (err) => {
+  logger.error(`Unhandled error: ${err.message}`);
+  process.exit(1);
 });
 
-app.use('/api/sneakers', sneakerRoute);
-app.use('/api/users', userRoute);
-app.use('/api/carts', cartRoute);
-app.use('/api/wishlists', wishlistRoute);
-app.use('/api/addresses', addressRoute);
-app.use('/api/reviews', reviewRoute);
-
-mongoose
-  .connect(process.env.MONGO_URI)
-  .then(() => {
-    console.log('Conected to: MongoDB!🍃');
-    app.listen(process.env.PORT, () => {
-      // console.log(`Server started at: https://sneakers-shop-tm46.onrender.com 🚀`);
-      console.log(`Server started at: http://localhost:${process.env.PORT} 🚀`);
-    });
-  })
-  .catch((error) => {
-    console.log(error);
-  });
+startServer();

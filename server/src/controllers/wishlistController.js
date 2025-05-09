@@ -1,150 +1,151 @@
-import { Client } from '../models/clientModel.js';
-import { Sneaker } from '../models/sneakerModel.js';
-import { SneakerVariant } from '../models/sneakerVariantModel.js';
-// Adicionar um tênis aos favoritos
-export const addFavorite = async (req, res) => {
+import Wishlist from '../models/wishlist.js';
+import logger from '../utils/logger.js';
+
+// Obter a wishlist do usuário logado
+export const getUserWishlist = async (req, res, next) => {
   try {
-    const { sneakerId } = req.body;
-    const userId = req.user._id; // Obtém ID do usuário autenticado via middleware
+    const userId = req.user._id; // Usando ID do usuário autenticado
 
-    // Verificar se o tênis existe
-    const existingSneaker = await Sneaker.findById(sneakerId);
-    if (!existingSneaker) {
-      return res.status(404).json({
-        success: false,
-        message: 'Tênis não encontrado',
+    // Buscar wishlist existente ou retornar uma vazia
+    let wishlist = await Wishlist.findOne({ user: userId })
+      .populate({
+        path: 'sneakers.sneaker',
+        model: 'Sneaker',
+        select: '-relatedSneakers -category -tags ',
+        populate: [
+          {
+            path: 'variants',
+            model: 'SneakerVariant',
+          },
+          {
+            path: 'brand',
+            model: 'Brand',
+            select: 'name',
+          },
+        ],
+      })
+      .select('-__v -createdAt -updatedAt -user');
+
+    if (!wishlist) {
+      return res.status(200).json({
+        success: true,
+        data: { sneakers: [] },
       });
     }
 
-    // Buscar cliente e atualizar sua wishlist
-    const client = await Client.findById(userId);
-    if (!client) {
-      return res.status(404).json({
-        success: false,
-        message: 'Cliente não encontrado',
-      });
-    }
-
-    // Inicializar wishlist se não existir
-    if (!client.wishlist) {
-      client.wishlist = [];
-    }
-
-    // Verificar se o tênis já está na wishlist
-    if (!client.wishlist.includes(sneakerId)) {
-      client.wishlist.push(sneakerId);
-      await client.save();
-    }
-
-    // Retornar a wishlist atualizada
     res.status(200).json({
       success: true,
-      wishlist: client.wishlist,
+      data: wishlist,
     });
   } catch (error) {
-    console.error('Erro no addFavorite:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Erro ao adicionar aos favoritos',
-      error: error.message,
-    });
+    logger.error(`Erro ao buscar wishlist: ${error.message}`);
+    next(error);
   }
 };
 
-// Obtém os favoritos do usuário autenticado
-export const getFavorites = async (req, res) => {
+// Adicionar um tênis à wishlist
+export const addToWishlist = async (req, res, next) => {
   try {
-    const userId = req.user._id;
+    const userId = req.user._id; // ID do usuário autenticado
+    const { sneakerId } = req.body;
 
-    // Buscar cliente com wishlist populada, incluindo a marca de cada tênis
-    const client = await Client.findById(userId).populate({
-      path: 'wishlist',
-      populate: {
-        path: 'brand',
-        select: 'name slug logo', // Selecionar os campos da marca que precisamos
-      },
-    });
-
-    if (!client) {
-      return res.status(404).json({
+    if (!sneakerId) {
+      return res.status(400).json({
         success: false,
-        message: 'Cliente não encontrado',
+        message: 'ID do tênis é obrigatório',
       });
     }
 
-    // Para cada sneaker, buscar as variantes diretamente
-    const wishlistWithVariants = await Promise.all(
-      (client.wishlist || []).map(async (sneaker) => {
-        const variants = await SneakerVariant.find({
-          sneaker: sneaker._id,
-        }).select('size color stock isAvailable');
-        // Extrai as cores das variantes que têm estoque > 0
-        const colorsInStock = [
-          ...new Set(
-            variants
-              .filter((variant) => variant.stock > 0)
-              .map((variant) => variant.color)
-          ),
-        ];
-        return {
-          ...sneaker.toObject(),
-          colorsInStock,
-          sizesInStock: variants,
-        };
-      })
+    // Verificar se já existe uma wishlist para o usuário
+    let wishlist = await Wishlist.findOne({ user: userId });
+
+    if (!wishlist) {
+      // Criar nova wishlist
+      wishlist = new Wishlist({
+        user: userId,
+        sneakers: [{ sneaker: sneakerId }],
+      });
+      await wishlist.save();
+      logger.info(`Nova wishlist criada para usuário ${userId}`);
+    } else {
+      // Adicionar à wishlist existente usando o método do modelo
+      await wishlist.addSneaker(sneakerId);
+      logger.info(
+        `Tênis ${sneakerId} adicionado à wishlist do usuário ${userId}`
+      );
+    }
+
+    // Retornar wishlist populada
+    wishlist = await Wishlist.findOne({ user: userId }).populate(
+      'sneakers.sneaker'
     );
 
     res.status(200).json({
       success: true,
-      wishlist: wishlistWithVariants,
+      message: 'Tênis adicionado à wishlist com sucesso',
+      data: wishlist,
     });
   } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: 'Erro ao buscar favoritos',
-      error: error.message,
-    });
+    logger.error(`Erro ao adicionar à wishlist: ${error.message}`);
+    next(error);
   }
 };
 
-// Remover um tênis dos favoritos
-export const removeFavorite = async (req, res) => {
+// Remover um tênis da wishlist
+export const removeFromWishlist = async (req, res, next) => {
   try {
+    const userId = req.user._id;
     const { sneakerId } = req.params;
-    const userId = req.user._id; // Usando ID do middleware
 
-    // Buscar cliente
-    const client = await Client.findById(userId);
-    if (!client) {
+    // Buscar wishlist
+    const wishlist = await Wishlist.findOne({ user: userId });
+
+    if (!wishlist) {
       return res.status(404).json({
         success: false,
-        message: 'Cliente não encontrado',
+        message: 'Wishlist não encontrada',
       });
     }
 
-    // Verificar se o tênis está na wishlist
-    const index = client.wishlist.indexOf(sneakerId);
-    if (index === -1) {
-      return res.status(404).json({
-        success: false,
-        message: 'Tênis não está nos favoritos',
-      });
-    }
-
-    // Remover o tênis da wishlist
-    client.wishlist.splice(index, 1);
-    await client.save();
+    // Usar o método do modelo para remover
+    await wishlist.removeSneaker(sneakerId);
+    logger.info(`Tênis ${sneakerId} removido da wishlist do usuário ${userId}`);
 
     res.status(200).json({
       success: true,
-      message: 'Tênis removido dos favoritos',
-      wishlist: client.wishlist,
+      message: 'Tênis removido da wishlist com sucesso',
     });
   } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: 'Erro ao remover dos favoritos',
-      error: error.message,
+    logger.error(`Erro ao remover da wishlist: ${error.message}`);
+    next(error);
+  }
+};
+
+// Limpar a wishlist inteira
+export const clearWishlist = async (req, res, next) => {
+  try {
+    const userId = req.user._id;
+
+    // Buscar e atualizar a wishlist
+    const wishlist = await Wishlist.findOne({ user: userId });
+
+    if (!wishlist) {
+      return res.status(404).json({
+        success: false,
+        message: 'Wishlist não encontrada',
+      });
+    }
+
+    wishlist.sneakers = [];
+    await wishlist.save();
+    logger.info(`Wishlist do usuário ${userId} foi esvaziada`);
+
+    res.status(200).json({
+      success: true,
+      message: 'Wishlist esvaziada com sucesso',
     });
+  } catch (error) {
+    logger.error(`Erro ao limpar wishlist: ${error.message}`);
+    next(error);
   }
 };

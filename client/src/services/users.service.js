@@ -1,7 +1,7 @@
 export const loginUser = async (email, password) => {
   try {
     const response = await fetch(
-      `${import.meta.env.VITE_API_URL}/api/users/login`,
+      `${import.meta.env.VITE_API_URL}/users/login`,
       {
         method: 'POST',
         headers: {
@@ -11,15 +11,28 @@ export const loginUser = async (email, password) => {
       }
     );
 
+    const data = await response.json().catch(() => ({}));
+
     if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
+      // Tratamento mais detalhado por código de status
+      if (response.status === 401) {
+        return {
+          success: false,
+          message: 'Email ou senha incorretos',
+        };
+      } else if (response.status === 403) {
+        return {
+          success: false,
+          message: 'Conta desativada. Entre em contato com o suporte.',
+        };
+      }
+
       return {
         success: false,
-        message: errorData.message || 'Erro ao fazer login',
+        message: data.message || 'Erro ao fazer login',
       };
     }
 
-    const data = await response.json();
     return { ...data, success: true };
   } catch (error) {
     console.error('Erro ao fazer login:', error);
@@ -33,15 +46,15 @@ export const loginUser = async (email, password) => {
 export const registerUser = async (name, email, password) => {
   try {
     const response = await fetch(
-      `${import.meta.env.VITE_API_URL}/api/users/register`,
+      `${import.meta.env.VITE_API_URL}/users/register`,
       {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ 
-          name, 
-          email, 
+        body: JSON.stringify({
+          name,
+          email,
           password,
         }),
       }
@@ -68,16 +81,13 @@ export const registerUser = async (name, email, password) => {
 
 export const getUser = async () => {
   try {
-    const response = await fetch(
-      `${import.meta.env.VITE_API_URL}/api/users`,
-      {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${localStorage.getItem('token')}`,
-        },
-      }
-    );
+    const response = await fetch(`${import.meta.env.VITE_API_URL}/users`, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${localStorage.getItem('token')}`,
+      },
+    });
 
     if (!response.ok) {
       throw new Error('Erro ao buscar usuário');
@@ -93,22 +103,44 @@ export const getUser = async () => {
 
 export const updateUser = async (userData) => {
   try {
-    const response = await fetch(
-      `${import.meta.env.VITE_API_URL}/api/users`,
-      {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${localStorage.getItem('token')}`,
-        },
-        body: JSON.stringify(userData),
-      }
-    );
+    const response = await fetch(`${import.meta.env.VITE_API_URL}/users`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${localStorage.getItem('token')}`,
+      },
+      body: JSON.stringify(userData),
+    });
 
     const data = await response.json();
     return { success: true, user: data };
   } catch (error) {
     console.error('Erro ao atualizar usuário:', error);
     throw error;
+  }
+};
+
+export const refreshToken = async () => {
+  try {
+    const response = await fetch(
+      `${import.meta.env.VITE_API_URL}/users/refresh-token`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${localStorage.getItem('token')}`,
+        },
+      }
+    );
+
+    if (!response.ok) {
+      throw new Error('Erro ao renovar token');
+    }
+
+    const data = await response.json();
+    return { success: true, token: data.token };
+  } catch (error) {
+    console.error('Erro ao renovar token:', error);
+    return { success: false, message: error.message };
   }
 };

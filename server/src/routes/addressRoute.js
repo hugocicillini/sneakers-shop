@@ -9,10 +9,11 @@ import { authMiddleware } from '../middlewares/authMiddleware.js';
 
 const router = express.Router();
 
+router.use(authMiddleware);
+
 // Rotas de endereço
-router.get('/', authMiddleware, getUserAddresses);
-router.post('/', authMiddleware, createAddress);
-router.put('/:id', authMiddleware, updateAddress);
-router.delete('/:id', authMiddleware, deleteAddress);
+router.route('/').get(getUserAddresses).post(createAddress);
+
+router.route('/:addressId').put(updateAddress).delete(deleteAddress);
 
 export default router;

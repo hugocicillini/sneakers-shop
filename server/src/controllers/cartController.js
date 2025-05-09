@@ -1,7 +1,21 @@
 import mongoose from 'mongoose';
-import { Cart } from '../models/cartModel.js';
-import { Sneaker } from '../models/sneakerModel.js';
-import { SneakerVariant } from '../models/sneakerVariantModel.js';
+import { Cart } from '../models/cart.js';
+import { Coupon } from '../models/coupon.js';
+import { Sneaker } from '../models/sneaker.js';
+import { SneakerVariant } from '../models/sneakerVariant.js';
+import logger from '../utils/logger.js';
+
+// Criar função auxiliar:
+const getProductImage = (sneaker, image) => {
+  return (
+    image ||
+    sneaker.coverImage?.url ||
+    sneaker.colorImages?.find((img) => img.isPrimary)?.url ||
+    sneaker.colorImages?.[0]?.url ||
+    sneaker.images?.find((img) => img.isPrimary)?.url ||
+    sneaker.images?.[0]?.url
+  );
+};
 
 // Adicionar item ao carrinho - Versão refatorada
 export const addToCart = async (req, res) => {
@@ -20,6 +34,14 @@ export const addToCart = async (req, res) => {
       brand,
       slug,
     } = req.body;
+
+    // Adicionar validação para quantidade:
+    if (!quantity || quantity < 1 || !Number.isInteger(quantity)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Quantidade deve ser um número inteiro maior que zero',
+      });
+    }
 
     // Criar cartItemId único se não fornecido
     const cartItemId =
@@ -103,13 +125,7 @@ export const addToCart = async (req, res) => {
     }
 
     // Usar a imagem fornecida pelo cliente se disponível, senão buscar do produto
-    const productImage =
-      image ||
-      sneaker.coverImage?.url ||
-      sneaker.colorImages?.find((img) => img.isPrimary)?.url ||
-      sneaker.colorImages?.[0]?.url ||
-      sneaker.images?.find((img) => img.isPrimary)?.url ||
-      sneaker.images?.[0]?.url;
+    const productImage = getProductImage(sneaker, image);
 
     if (!productImage) {
       return res.status(400).json({
@@ -140,24 +156,7 @@ export const addToCart = async (req, res) => {
     };
 
     // Verificar se item já existe e atualizar ou adicionar novo
-    const existingItemIndex = cart.items.findIndex(
-      (item) =>
-        item.cartItemId === cartItemId ||
-        (item.sneaker.toString() === sneakerId &&
-          item.variant.toString() === variantId)
-    );
-
-    if (existingItemIndex >= 0) {
-      cart.items[existingItemIndex].quantity += quantity;
-    } else {
-      cart.items.push(cartItem);
-    }
-
-    // Recalcular preço total do carrinho
-    cart.totalPrice = cart.items.reduce(
-      (total, item) => total + item.price * item.quantity,
-      0
-    );
+    cart.addItem(cartItem);
 
     await cart.save();
 
@@ -169,10 +168,11 @@ export const addToCart = async (req, res) => {
 
     res.status(200).json({
       success: true,
-      cart,
+      data: cart, // Sempre usar "data" para o dado principal
+      message: 'Item adicionado ao carrinho',
     });
   } catch (error) {
-    console.error('Erro ao adicionar ao carrinho:', error);
+    logger.error('Erro ao adicionar ao carrinho:', error);
     res.status(500).json({
       success: false,
       message: 'Erro ao adicionar produto ao carrinho',
@@ -217,7 +217,7 @@ export const getCart = async (req, res) => {
       cart,
     });
   } catch (error) {
-    console.error('Erro ao buscar carrinho:', error);
+    logger.error('Erro ao buscar carrinho:', error);
     res.status(500).json({
       success: false,
       message: 'Erro ao buscar carrinho',
@@ -285,7 +285,7 @@ export const updateItemQuantity = async (req, res) => {
       cart,
     });
   } catch (error) {
-    console.error('Erro ao atualizar quantidade:', error);
+    logger.error('Erro ao atualizar quantidade:', error);
     res.status(500).json({
       success: false,
       message: 'Erro ao atualizar quantidade',
@@ -308,13 +308,11 @@ export const removeFromCart = async (req, res) => {
       });
     }
 
-    // Lógica para usuários logados - encontrar todos os carrinhos do usuário
-    const userCarts = await Cart.find({
+    // Lógica para usuários logados - encontrar o carrinho ativo
+    const activeCart = await Cart.findOne({
       user: req.user.id,
+      status: 'active',
     });
-
-    // Encontrar o carrinho ativo
-    const activeCart = userCarts.find((cart) => cart.status === 'active');
 
     if (!activeCart) {
       return res.status(404).json({
@@ -336,13 +334,7 @@ export const removeFromCart = async (req, res) => {
     }
 
     // Remover o item
-    activeCart.items.splice(itemIndex, 1);
-
-    // Atualizar o valor total do carrinho
-    activeCart.totalPrice = activeCart.items.reduce(
-      (total, item) => total + item.price * item.quantity,
-      0
-    );
+    activeCart.removeItem(cartItemId);
 
     // Se o carrinho ficar vazio, apenas marcar como abandonado (sem excluir histórico)
     if (activeCart.items.length === 0) {
@@ -369,7 +361,7 @@ export const removeFromCart = async (req, res) => {
       cart: activeCart,
     });
   } catch (error) {
-    console.error('Erro ao remover item:', error);
+    logger.error('Erro ao remover item:', error);
     res.status(500).json({
       success: false,
       message: 'Erro ao remover item do carrinho',
@@ -409,7 +401,7 @@ export const clearCart = async (req, res) => {
       cart,
     });
   } catch (error) {
-    console.error('Erro ao limpar carrinho:', error);
+    logger.error('Erro ao limpar carrinho:', error);
     res.status(500).json({
       success: false,
       message: 'Erro ao limpar carrinho',
@@ -505,10 +497,78 @@ export const syncCart = async (req, res) => {
       cart,
     });
   } catch (error) {
-    console.error('Erro ao sincronizar carrinho:', error);
+    logger.error('Erro ao sincronizar carrinho:', error);
     res.status(500).json({
       success: false,
       message: 'Erro ao sincronizar carrinho',
+      error: error.message,
+    });
+  }
+};
+
+export const applyCoupon = async (req, res) => {
+  try {
+    const { code } = req.body;
+
+    if (!req.user) {
+      return res.status(200).json({
+        success: true,
+        message: 'Cupom para armazenamento local',
+        couponCode: code,
+      });
+    }
+
+    const cart = await Cart.findOne({
+      user: req.user.id,
+      status: 'active',
+    });
+
+    if (!cart) {
+      return res.status(404).json({
+        success: false,
+        message: 'Carrinho não encontrado',
+      });
+    }
+
+    // Buscar o cupom no banco
+    const coupon = await Coupon.findOne({
+      code,
+      isActive: true,
+      startDate: { $lte: new Date() },
+      endDate: { $gte: new Date() },
+    });
+
+    if (!coupon) {
+      return res.status(404).json({
+        success: false,
+        message: 'Cupom inválido ou expirado',
+      });
+    }
+
+    // Validar cupom para o carrinho atual
+    const isValid = await coupon.isValid(cart.totalPrice, req.user.id);
+    if (!isValid) {
+      return res.status(400).json({
+        success: false,
+        message: 'Cupom não aplicável para este carrinho',
+      });
+    }
+
+    // Aplicar desconto
+    cart.appliedCouponCode = code;
+    cart.discount = coupon.calculateDiscount(cart.totalPrice);
+    await cart.save();
+
+    res.status(200).json({
+      success: true,
+      message: 'Cupom aplicado com sucesso',
+      data: cart,
+    });
+  } catch (error) {
+    logger.error('Erro ao aplicar cupom:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Erro ao aplicar cupom',
       error: error.message,
     });
   }

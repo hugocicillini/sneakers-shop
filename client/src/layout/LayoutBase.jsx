@@ -102,7 +102,7 @@ const LayoutBase = ({ children, search, setSearch }) => {
                   <Button variant="ghost" className="flex gap-2 items-center">
                     <CircleUserRound />
                     <span className="text-sm">
-                      Olá, {user.name.split(' ')[0]}
+                      Olá, {user.user.name.split(' ')[0]}
                     </span>
                   </Button>
                 </Link>

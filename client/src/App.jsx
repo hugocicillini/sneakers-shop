@@ -8,10 +8,12 @@ import Cart from './pages/Cart';
 import Home from './pages/Home';
 import Identification from './pages/Identification';
 import Login from './pages/Login';
+import Payment from './pages/Payment';
 import Register from './pages/Register'; // Se você tiver uma página de registro
 import SearchFound from './pages/SearchFound';
 import SneakerDetail from './pages/SneakerDetail';
 import Wishlist from './pages/Wishlist';
+import Confirmation from './pages/Confirmation';
 
 function App() {
   return (
@@ -23,12 +25,10 @@ function App() {
               <Route path="/" element={<Home />} />
 
               <Route path="/search" element={<SearchFound />} />
-
-              {/* Rotas públicas */}
+              
               <Route path="/login" element={<Login />} />
               <Route path="/register" element={<Register />} />
 
-              {/* Rotas protegidas (requerem autenticação) */}
               <Route
                 path="/account"
                 element={
@@ -53,6 +53,10 @@ function App() {
                 path="/checkout/identification"
                 element={<Identification />}
               />
+              
+              <Route path="/checkout/payment" element={<Payment />} />
+              <Route path="/checkout/confirmation" element={<Confirmation />} />
+              
             </Routes>
           </BrowserRouter>
         </CartProvider>

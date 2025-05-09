@@ -12,7 +12,7 @@ const WishlistContext = createContext();
 export const WishlistProvider = ({ children }) => {
   const [wishlistItems, setWishlistItems] = useState([]);
   const [loading, setLoading] = useState(true);
-  const { user, isAuthenticated } = useAuth();
+  const { isAuthenticated } = useAuth();
 
   // Carregar wishlist quando o componente montar ou usuário autenticar
   const loadWishlist = async () => {
@@ -27,11 +27,15 @@ export const WishlistProvider = ({ children }) => {
       const response = await getWishlist();
 
       if (response.success) {
-        // O novo backend retorna { success: true, wishlist: [...] }
         setWishlistItems(response.wishlist || []);
       } else {
         console.error('Erro ao carregar wishlist:', response.message);
         setWishlistItems([]);
+        toast({
+          title: 'Erro',
+          description: 'Não foi possível carregar sua lista de desejos',
+          variant: 'destructive',
+        });
       }
     } catch (error) {
       console.error('Erro ao carregar wishlist:', error);
@@ -48,9 +52,12 @@ export const WishlistProvider = ({ children }) => {
 
   // Verificar se um produto está na wishlist
   const isInWishlist = (sneakerId) => {
-    return wishlistItems.some(item => 
-      item._id === sneakerId || item === sneakerId
-    );
+    return wishlistItems.some((item) => {
+      if (item.sneaker) {
+        return item.sneaker._id === sneakerId || item.sneaker === sneakerId;
+      }
+      return item._id === sneakerId || item === sneakerId;
+    });
   };
 
   // Adicionar à wishlist
@@ -66,21 +73,25 @@ export const WishlistProvider = ({ children }) => {
 
     try {
       // Atualiza o estado local imediatamente para feedback instantâneo
-      setWishlistItems((prev) => [...prev, sneakerId]);
+      setWishlistItems((prev) => [...prev, { sneaker: { _id: sneakerId } }]);
 
-      // Chama a API em segundo plano
       const response = await addToWishlist(sneakerId);
 
       if (!response.success) {
         throw new Error(response.message || 'Erro ao adicionar à wishlist');
       }
 
+      toast({
+        title: 'Adicionado com sucesso',
+        description: 'Produto adicionado à sua lista de desejos',
+        variant: 'default',
+      });
+
       // Recarrega a wishlist para garantir sincronização
       await loadWishlist();
       return true;
     } catch (error) {
       console.error('Erro ao adicionar à wishlist:', error);
-      // Reverte a mudança local em caso de erro
       setWishlistItems((prev) => prev.filter((id) => id !== sneakerId));
       toast({
         title: 'Erro',
@@ -97,9 +108,9 @@ export const WishlistProvider = ({ children }) => {
 
     try {
       // Atualiza o estado local imediatamente para feedback instantâneo
-      setWishlistItems((prev) => 
-        prev.filter(item => 
-          (typeof item === 'object' ? item._id !== sneakerId : item !== sneakerId)
+      setWishlistItems((prev) =>
+        prev.filter((item) =>
+          typeof item === 'object' ? item._id !== sneakerId : item !== sneakerId
         )
       );
 
@@ -110,13 +121,18 @@ export const WishlistProvider = ({ children }) => {
         throw new Error(response.message || 'Erro ao remover da wishlist');
       }
 
+      toast({
+        title: 'Removido com sucesso',
+        description: 'Produto removido da sua lista de desejos',
+        variant: 'default',
+      });
+
       // Recarrega a wishlist para garantir sincronização
       await loadWishlist();
       return true;
     } catch (error) {
       console.error('Erro ao remover da wishlist:', error);
-      // Reverte a mudança local em caso de erro
-      loadWishlist(); // Recarregar lista completa é mais seguro que tentar adicionar de volta
+      await loadWishlist();
       toast({
         title: 'Erro',
         description: 'Não foi possível remover da wishlist',
@@ -142,6 +158,7 @@ export const WishlistProvider = ({ children }) => {
     addToWishlistItem,
     removeFromWishlistItem,
     loading,
+    wishlistCount: wishlistItems.length,
   };
 
   return (
@@ -154,9 +171,7 @@ export const WishlistProvider = ({ children }) => {
 export const useWishlist = () => {
   const context = useContext(WishlistContext);
   if (!context) {
-    throw new Error(
-      'useWishlist deve ser usado dentro de um WishlistProvider'
-    );
+    throw new Error('useWishlist deve ser usado dentro de um WishlistProvider');
   }
   return context;
 };

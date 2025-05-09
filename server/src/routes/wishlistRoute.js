@@ -1,17 +1,17 @@
 import express from 'express';
 import {
-  addFavorite,
-  getFavorites,
-  removeFavorite
+  addToWishlist,
+  clearWishlist,
+  getUserWishlist,
+  removeFromWishlist,
 } from '../controllers/wishlistController.js';
 import { authMiddleware } from '../middlewares/authMiddleware.js';
 
 const router = express.Router();
 
-router.post('/', authMiddleware, addFavorite);
-
-router.get('/', authMiddleware, getFavorites);
-
-router.delete('/:sneakerId', authMiddleware, removeFavorite);
+router.get('/', authMiddleware, getUserWishlist);
+router.post('/', authMiddleware, addToWishlist);
+router.delete('/:sneakerId', authMiddleware, removeFromWishlist);
+router.delete('/', authMiddleware, clearWishlist);
 
 export default router;

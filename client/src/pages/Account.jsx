@@ -1,5 +1,5 @@
-import AddressDialog from '@/components/Addresses';
-import ProfileDialog from '@/components/Profile';
+import AddressDialog from '@/components/user/Addresses';
+import ProfileDialog from '@/components/user/Profile';
 import {
   Card,
   CardContent,
@@ -22,7 +22,7 @@ import { ChevronDown, ChevronUp, Loader2, Package } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
 const Account = () => {
-  const { user, setUser } = useAuth();
+  const { user, updateUserData } = useAuth();
   const [expandedOrders, setExpandedOrders] = useState({});
   const [orders, setOrders] = useState([
     {
@@ -76,6 +76,11 @@ const Account = () => {
 
   useEffect(() => {
     const fetchUserData = async () => {
+      if (!user) {
+        setLoading(false);
+        return;
+      }
+
       setLoading(true);
       try {
         const [userResponse, addressResponse] = await Promise.all([
@@ -86,17 +91,33 @@ const Account = () => {
         if (userResponse.success && userResponse.user) {
           setUserData(userResponse.user);
         } else {
-          console.error('Erro ao obter dados do usuário:', userResponse);
+          toast({
+            title: 'Erro ao carregar dados',
+            description: 'Não foi possível carregar seus dados pessoais.',
+            variant: 'destructive',
+          });
         }
 
         if (addressResponse.success) {
-          setAddresses(addressResponse.addresses || []);
+          setAddresses(addressResponse.data || []);
         } else {
-          console.error('Erro ao buscar endereços:', addressResponse.message);
+          toast({
+            title: 'Erro ao carregar endereços',
+            description:
+              addressResponse.message ||
+              'Não foi possível carregar seus endereços.',
+            variant: 'destructive',
+          });
           setAddresses([]);
         }
       } catch (error) {
         console.error('Erro ao buscar dados:', error);
+        toast({
+          title: 'Erro de conexão',
+          description:
+            'Não foi possível carregar seus dados. Verifique sua conexão.',
+          variant: 'destructive',
+        });
         setAddresses([]);
       } finally {
         setLoading(false);
@@ -120,14 +141,9 @@ const Account = () => {
           variant: 'destructive',
         });
       } else {
-        // Atualizar apenas os dados básicos do usuário
         setUserData(response.user);
 
-        // Atualizar o estado global do usuário
-        setUser((prevUser) => ({
-          ...prevUser,
-          ...response.user,
-        }));
+        updateUserData(response.user);
 
         toast({
           title: 'Perfil atualizado',
@@ -141,7 +157,6 @@ const Account = () => {
 
   const handleAddressUpdated = async (addressId, addressData, isEditing) => {
     try {
-      // Editar endereço existente
       if (isEditing) {
         const response = await updateUserAddress(addressId, addressData);
 
@@ -154,10 +169,9 @@ const Account = () => {
           return;
         }
 
-        // Recarregar endereços do backend para garantir consistência
         const refreshResponse = await getUserAddresses();
         if (refreshResponse.success) {
-          setAddresses(refreshResponse.addresses || []);
+          setAddresses(refreshResponse.data || []);
         }
 
         toast({
@@ -165,9 +179,7 @@ const Account = () => {
           description: 'Endereço atualizado com sucesso!',
           variant: 'success',
         });
-      }
-      // Adicionar novo endereço
-      else {
+      } else {
         const response = await createAddress(addressData);
 
         if (!response.success) {
@@ -179,10 +191,9 @@ const Account = () => {
           return;
         }
 
-        // Recarregar endereços do backend para garantir consistência
         const refreshResponse = await getUserAddresses();
         if (refreshResponse.success) {
-          setAddresses(refreshResponse.addresses || []);
+          setAddresses(refreshResponse.data || []);
         }
 
         toast({
@@ -190,12 +201,6 @@ const Account = () => {
           description: 'Endereço adicionado com sucesso!',
           variant: 'success',
         });
-      }
-
-      // Atualizar os dados do usuário para refletir possíveis mudanças no endereço padrão
-      const userResponse = await getUser();
-      if (userResponse.success && userResponse.user) {
-        setUserData(userResponse.user);
       }
     } catch (error) {
       console.error('Erro:', error);
@@ -221,9 +226,7 @@ const Account = () => {
         return;
       }
 
-      // Atualizar apenas o estado local de endereços
       setAddresses((prevAddresses) => {
-        // Filtrar o endereço excluído
         let filteredAddresses = prevAddresses.filter(
           (addr) => addr._id !== addressId
         );
@@ -292,17 +295,29 @@ const Account = () => {
                   <div className="space-y-3">
                     <div>
                       <p className="text-sm font-medium text-gray-500">Nome</p>
-                      <p>{userData?.name || 'Nome do usuário'}</p>
+                      <p>
+                        {userData?.data?.name ||
+                          userData?.name ||
+                          'Nome do usuário'}
+                      </p>
                     </div>
                     <div>
                       <p className="text-sm font-medium text-gray-500">Email</p>
-                      <p>{userData?.email || 'email@exemplo.com'}</p>
+                      <p>
+                        {userData?.data?.email ||
+                          userData?.email ||
+                          'email@exemplo.com'}
+                      </p>
                     </div>
                     <div>
                       <p className="text-sm font-medium text-gray-500">
                         Telefone
                       </p>
-                      <p>{userData?.phone || '(11) 99999-9999'}</p>
+                      <p>
+                        {userData?.data?.phone ||
+                          userData?.phone ||
+                          '(00) 0000-0000'}
+                      </p>
                     </div>
                   </div>
                 </CardContent>

@@ -28,7 +28,7 @@ export const getCart = async () => {
     }
 
     // Buscar carrinho do servidor
-    const response = await fetch(`${import.meta.env.VITE_API_URL}/api/carts`, {
+    const response = await fetch(`${import.meta.env.VITE_API_URL}/carts`, {
       method: 'GET',
       headers: getAuthHeaders(),
     });
@@ -91,7 +91,7 @@ export const addToCart = async (item) => {
       }
 
       const response = await fetch(
-        `${import.meta.env.VITE_API_URL}/api/carts`,
+        `${import.meta.env.VITE_API_URL}/carts`,
         {
           method: 'POST',
           headers: getAuthHeaders(),
@@ -152,7 +152,7 @@ export const updateCartItemQuantity = async (cartItemId, quantity) => {
   try {
     if (isAuthenticated()) {
       const response = await fetch(
-        `${import.meta.env.VITE_API_URL}/api/carts/${cartItemId}`,
+        `${import.meta.env.VITE_API_URL}/carts/${cartItemId}`,
         {
           method: 'PATCH',
           headers: getAuthHeaders(),
@@ -185,7 +185,7 @@ export const removeFromCart = async (cartItemId) => {
   try {
     if (isAuthenticated()) {
       const response = await fetch(
-        `${import.meta.env.VITE_API_URL}/api/carts/${cartItemId}`,
+        `${import.meta.env.VITE_API_URL}/carts/${cartItemId}`,
         {
           method: 'DELETE',
           headers: getAuthHeaders(),
@@ -217,7 +217,7 @@ export const clearCart = async () => {
   try {
     if (isAuthenticated()) {
       const response = await fetch(
-        `${import.meta.env.VITE_API_URL}/api/carts`,
+        `${import.meta.env.VITE_API_URL}/carts`,
         {
           method: 'DELETE',
           headers: getAuthHeaders(),

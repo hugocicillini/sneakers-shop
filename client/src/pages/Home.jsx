@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import LayoutBase from '@/layout/LayoutBase';
-import Sneakers from '@/components/Sneakers';
+import Sneakers from '@/components/sneaker/Sneakers';
 
 const Home = () => {
   const [search, setSearch] = useState('');

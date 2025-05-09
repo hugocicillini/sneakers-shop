@@ -1,15 +1,12 @@
 export const getUserAddresses = async () => {
   try {
-    const response = await fetch(
-      `${import.meta.env.VITE_API_URL}/api/addresses`,
-      {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${localStorage.getItem('token')}`,
-        },
-      }
-    );
+    const response = await fetch(`${import.meta.env.VITE_API_URL}/addresses`, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${localStorage.getItem('token')}`,
+      },
+    });
 
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}));
@@ -33,7 +30,7 @@ export const getUserAddresses = async () => {
 export const updateUserAddress = async (addressId, addressData) => {
   try {
     const response = await fetch(
-      `${import.meta.env.VITE_API_URL}/api/addresses/${addressId}`,
+      `${import.meta.env.VITE_API_URL}/addresses/${addressId}`,
       {
         method: 'PUT',
         headers: {
@@ -65,17 +62,14 @@ export const updateUserAddress = async (addressId, addressData) => {
 
 export const createAddress = async (addressData) => {
   try {
-    const response = await fetch(
-      `${import.meta.env.VITE_API_URL}/api/addresses`,
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${localStorage.getItem('token')}`,
-        },
-        body: JSON.stringify(addressData),
-      }
-    );
+    const response = await fetch(`${import.meta.env.VITE_API_URL}/addresses`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${localStorage.getItem('token')}`,
+      },
+      body: JSON.stringify(addressData),
+    });
 
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}));
@@ -99,7 +93,7 @@ export const createAddress = async (addressData) => {
 export const deleteUserAddress = async (addressId) => {
   try {
     const response = await fetch(
-      `${import.meta.env.VITE_API_URL}/api/addresses/${addressId}`,
+      `${import.meta.env.VITE_API_URL}/addresses/${addressId}`,
       {
         method: 'DELETE',
         headers: {
@@ -110,7 +104,11 @@ export const deleteUserAddress = async (addressId) => {
     );
 
     if (!response.ok) {
-      throw new Error('Erro ao excluir endereço');
+      const errorData = await response.json().catch(() => ({}));
+      return {
+        success: false,
+        message: errorData.message || 'Erro ao excluir endereço',
+      };
     }
 
     return response.json();

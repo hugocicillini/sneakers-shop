@@ -1,3 +1,4 @@
+import StarRating from '@/components/sneaker/StarRating';
 import LayoutBase from '@/layout/LayoutBase';
 import { getSneakers } from '@/services/sneakers.service'; // Assumindo que existe um serviço de pesquisa
 import { useEffect, useState } from 'react';
@@ -29,7 +30,7 @@ const SearchFound = () => {
           const response = await getSneakers(1, 20, query);
 
           // Verificar se a resposta tem o formato esperado (com a chave sneakers)
-          const data = response.sneakers || response.data || response || [];
+          const data = response.data.sneakers || [];
 
           console.log('Resultados da pesquisa:', data);
           setResults(data);
@@ -135,28 +136,10 @@ const SearchFound = () => {
                 </div>
 
                 {/* Avaliações */}
-                <div className="flex items-center mb-3">
-                  <div className="flex">
-                    {[...Array(5)].map((_, i) => (
-                      <svg
-                        key={i}
-                        xmlns="http://www.w3.org/2000/svg"
-                        width="14"
-                        height="14"
-                        fill={
-                          i < Math.floor(sneaker.rating) ? '#FFD700' : '#E5E7EB'
-                        }
-                        viewBox="0 0 24 24"
-                      >
-                        <path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z" />
-                      </svg>
-                    ))}
-                  </div>
-                  <span className="text-xs text-gray-600 ml-1">
-                    {sneaker.rating} ({sneaker.reviewCount || 0})
-                  </span>
-                </div>
-
+                <StarRating
+                  rating={sneaker.rating}
+                  reviewCount={sneaker.reviewCount}
+                />
                 {/* Preço */}
                 <div className="flex items-center justify-between">
                   <div>

@@ -54,9 +54,6 @@ export const getSneakers = async (
       // Enviar preço máximo como parâmetro para o backend (sem alteração)
       params.set('maxPrice', filters.price.max);
     }
-
-    // Adicionar parâmetro para indicar que queremos considerar preço após desconto
-    params.set('considerDiscount', 'true');
   }
 
   // Corrigir o envio da ordenação para usar o mapeamento adequado
@@ -67,7 +64,7 @@ export const getSneakers = async (
   }
 
   // Construir a URL
-  const url = `${import.meta.env.VITE_API_URL}/api/sneakers${
+  const url = `${import.meta.env.VITE_API_URL}/sneakers${
     params.toString() ? `?${params.toString()}` : ''
   }`;
 
@@ -131,7 +128,7 @@ function mapSortByToBackend(sortBy) {
 export const getSneakerBySlug = async (slug, color) => {
   // Atualização para usar URL base da variável de ambiente e popular variantes/reviews
   const response = await fetch(
-    `${import.meta.env.VITE_API_URL}/api/sneakers/${slug}?color=${encodeURIComponent(color)}`,
+    `${import.meta.env.VITE_API_URL}/sneakers/${slug}${color ? `?color=${encodeURIComponent(color)}` : ''}`,
     {
       method: 'GET',
       headers: {
@@ -144,49 +141,21 @@ export const getSneakerBySlug = async (slug, color) => {
     throw new Error('Failed to fetch sneaker details');
   }
 
-  const data = await response.json();
-
-  // Verifica se há variantes disponíveis e obtém a primeira cor em estoque
-  if (
-    data.variants &&
-    Array.isArray(data.variants) &&
-    data.variants.length > 0
-  ) {
-    // Filtra as variantes com estoque > 0 e agrupa por cor
-    const availableColors = {};
-    data.variants.forEach((variant) => {
-      if (variant.stock > 0 && variant.isActive) {
-        if (!availableColors[variant.color]) {
-          availableColors[variant.color] = true;
-        }
-      }
-    });
-
-    const availableColorsList = Object.keys(availableColors);
-
-    // Verifica se a cor padrão do produto tem estoque disponível
-    if (data.defaultColor && availableColors[data.defaultColor]) {
-      // Mantém a cor padrão do produto se estiver disponível
-    } else if (availableColorsList.length > 0) {
-      // Se não tiver cor padrão ou ela não estiver disponível, usa a primeira cor com estoque
-      data.defaultColor = availableColorsList[0];
-    }
-
-    // Busca imagens da cor padrão
-    if (data.defaultColor) {
-      const colorImageSet = data.colorImages?.find(
-        (item) => item.color.toLowerCase() === data.defaultColor.toLowerCase()
-      );
-
-      // Se houver imagens para a cor padrão, já as disponibiliza
-      if (colorImageSet && colorImageSet.images.length > 0) {
-        data.currentColorImages = colorImageSet.images;
-      }
-    }
-
-    // Adiciona lista de cores disponíveis
-    data.availableColors = availableColorsList;
+  const result = await response.json();
+  
+  // Os dados reais estão dentro da propriedade 'data'
+  const data = result.data || result;
+  
+  // Log para debug
+  console.log("Dados recebidos do backend:", data);
+  
+  // Se temos colorsInStock, garantir que estejam em minúsculo para comparação consistente
+  if (data.colorsInStock && Array.isArray(data.colorsInStock)) {
+    // Já está em minúsculo no backend, mas vamos garantir
+    data.colorsInStock = data.colorsInStock.map(c => c.toLowerCase());
   }
+  
+  // O backend já está enviando availableColors como objetos, não precisamos criar
 
   return data;
 };
@@ -348,7 +317,7 @@ export const deleteSneaker = async (id) => {
 };
 
 export const getRelatedSneakers = async (id) => {
-  const response = await fetch(`/api/sneakers/${id}/related`);
+  const response = await fetch(`/sneakers/${id}/related`);
 
   if (!response.ok) {
     throw new Error('Failed to fetch related sneakers');

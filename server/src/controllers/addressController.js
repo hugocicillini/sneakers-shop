@@ -1,18 +1,24 @@
-import { Address } from '../models/addressModel.js';
-import { Client } from '../models/clientModel.js';
+import mongoose from 'mongoose';
+import { Address } from '../models/address.js';
+import { Client } from '../models/client.js';
+import logger from '../utils/logger.js';
 
 export const getUserAddresses = async (req, res) => {
   try {
     // Usar o ID do usuário do middleware de autenticação
     const userId = req.user._id;
 
-    const addresses = await Address.find({ user: userId });
+    const addresses = await Address.find({ user: userId }).sort({
+      isDefault: -1,
+      createdAt: -1,
+    });
 
     return res.status(200).json({
       success: true,
-      addresses: addresses,
+      data: addresses,
     });
   } catch (error) {
+    logger.error('Erro ao buscar endereços:', error);
     return res.status(500).json({
       success: false,
       message: 'Erro ao buscar endereços',
@@ -51,13 +57,6 @@ export const createAddress = async (req, res) => {
       reference: addressData.reference || '',
     };
 
-    if (addressData.isDefault === true) {
-      await Address.updateMany(
-        { user: userId, isDefault: true },
-        { $set: { isDefault: false } }
-      );
-    }
-
     const newAddress = new Address(newAddressData);
     await newAddress.save();
 
@@ -78,10 +77,10 @@ export const createAddress = async (req, res) => {
 
     return res.status(201).json({
       success: true,
-      address: addressObject,
+      data: addressObject,
     });
   } catch (error) {
-    console.error('Erro ao criar endereço:', error);
+    logger.error('Erro ao criar endereço:', error);
     return res.status(500).json({
       success: false,
       message: 'Erro ao criar endereço',
@@ -92,12 +91,19 @@ export const createAddress = async (req, res) => {
 
 export const updateAddress = async (req, res) => {
   try {
-    const { id } = req.params;
+    const { addressId } = req.params;
     const addressData = req.body;
-    const userId = req.user._id; // Obter ID do usuário autenticado
+    const userId = req.user._id;
+
+    if (!mongoose.Types.ObjectId.isValid(addressId)) {
+      return res.status(400).json({
+        success: false,
+        message: 'ID de endereço inválido',
+      });
+    }
 
     // Buscar o endereço atual para comparações
-    const currentAddress = await Address.findById(id);
+    const currentAddress = await Address.findById(addressId);
 
     if (!currentAddress) {
       return res.status(404).json({
@@ -143,10 +149,10 @@ export const updateAddress = async (req, res) => {
 
     return res.status(200).json({
       success: true,
-      address: addressObject,
+      data: addressObject,
     });
   } catch (error) {
-    console.error('Erro ao atualizar endereço:', error);
+    logger.error('Erro ao atualizar endereço:', error);
     return res.status(500).json({
       success: false,
       message: 'Erro ao atualizar endereço',
@@ -157,12 +163,12 @@ export const updateAddress = async (req, res) => {
 
 export const deleteAddress = async (req, res) => {
   try {
-    const { id } = req.params;
+    const { addressId } = req.params;
 
     const userId = req.user._id; // Obter ID do usuário autenticado
 
     // Buscar o endereço antes de deletar
-    const addressToDelete = await Address.findById(id);
+    const addressToDelete = await Address.findById(addressId);
 
     if (!addressToDelete) {
       return res.status(404).json({
@@ -182,36 +188,34 @@ export const deleteAddress = async (req, res) => {
     let newDefaultAddress = null;
 
     if (addressToDelete.isDefault) {
+      // Verificar se é o único endereço padrão
       const defaultCount = await Address.countDocuments({
         user: addressToDelete.user,
         isDefault: true,
       });
 
+      // Se for o único endereço padrão, precisamos definir outro
       if (defaultCount <= 1) {
-        const totalAddresses = await Address.countDocuments({
+        // Buscar outro endereço para definir como padrão (o mais recente)
+        const anotherAddress = await Address.findOne({
           user: addressToDelete.user,
-        });
+          _id: { $ne: addressId },
+        }).sort({ createdAt: -1 });
 
-        if (totalAddresses > 1) {
-          const anotherAddress = await Address.findOne({
-            user: addressToDelete.user,
-            _id: { $ne: id },
+        if (anotherAddress) {
+          // Encontrou outro endereço, defini-lo como padrão
+          newDefaultAddress = await Address.findByIdAndUpdate(
+            anotherAddress._id,
+            { isDefault: true },
+            { new: true }
+          );
+
+          // Atualizar a referência no cliente
+          await Client.findByIdAndUpdate(addressToDelete.user, {
+            defaultAddress: anotherAddress._id,
           });
-
-          if (anotherAddress) {
-            newDefaultAddress = await Address.findByIdAndUpdate(
-              anotherAddress._id,
-              { isDefault: true },
-              { new: true }
-            );
-
-            // Atualizar o defaultAddress do cliente
-            await Client.findByIdAndUpdate(addressToDelete.user, {
-              defaultAddress: anotherAddress._id,
-            });
-          }
         } else {
-          // Se não houver outro endereço, definir defaultAddress como null
+          // Não há outros endereços, remover referência do cliente
           await Client.findByIdAndUpdate(addressToDelete.user, {
             defaultAddress: null,
           });
@@ -220,15 +224,15 @@ export const deleteAddress = async (req, res) => {
     }
 
     // Agora podemos excluir o endereço com segurança
-    const deletedAddress = await Address.findByIdAndDelete(id);
+    await addressToDelete.deleteOne();
 
     return res.status(200).json({
       success: true,
       message: 'Endereço removido com sucesso',
-      newDefaultAddress: newDefaultAddress ? newDefaultAddress : null,
+      newDefaultAddress: newDefaultAddress || null,
     });
   } catch (error) {
-    console.error('Erro ao remover endereço:', error);
+    logger.error('Erro ao remover endereço:', error);
     return res.status(500).json({
       success: false,
       message: 'Erro ao remover endereço',
