@@ -1,509 +1,368 @@
-import OrderSummary from '@/components/checkout/OrderSummary';
-import BankSlipPayment from '@/components/checkout/payment/BankSlipPayment';
+import BoletoPaymentForm from '@/components/checkout/payment/BoletoPaymentForm';
 import CreditCardForm from '@/components/checkout/payment/CreditCardForm';
-import PixPayment from '@/components/checkout/payment/PixPayment';
-import { Badge } from '@/components/ui/badge';
-import { Card, CardContent } from '@/components/ui/card';
-import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
+import PixPaymentForm from '@/components/checkout/payment/PixPaymentForm';
+import { Button } from '@/components/ui/button';
+import { Separator } from '@/components/ui/separator';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useAuth } from '@/contexts/AuthContext';
 import { useCart } from '@/contexts/CartContext';
-import { toast } from '@/hooks/use-toast';
 import LayoutCheckout from '@/layout/LayoutCheckout';
-import {
-  checkPaymentStatus,
-  generateBankSlip,
-  generatePixPayment,
-  initializePayment,
-  processCardPayment,
-} from '@/services/payment.service';
-import { CreditCard, QrCode, Receipt } from 'lucide-react';
-import { useCallback, useEffect, useState } from 'react';
+import { motion } from 'framer-motion';
+import { ArrowLeft, Check, CreditCard, QrCode, Receipt } from 'lucide-react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
-// Hook para gerenciar o estado do pagamento
-const usePaymentState = (clearCart, navigate) => {
-  const [paymentMethod, setPaymentMethod] = useState('credit-card');
-  const [processing, setProcessing] = useState(false);
-  const [orderInfo, setOrderInfo] = useState(null);
-  const [paymentData, setPaymentData] = useState(null);
-
-  // Estados específicos para PIX
-  const [pixData, setPixData] = useState(null);
-  const [checkingPixStatus, setCheckingPixStatus] = useState(false);
-
-  // Inicialização do pedido
-  const initializeOrder = useCallback(
-    async (items, subtotal) => {
-      try {
-        const shippingInfo = JSON.parse(
-          sessionStorage.getItem('shippingInfo') || '{}'
-        );
-
-        const response = await initializePayment({
-          items,
-          shippingInfo,
-          subtotal,
-        });
-
-        if (response.success) {
-          setOrderInfo(response.orderInfo);
-          setPaymentData(response.paymentData);
-          return true;
-        } else {
-          toast({
-            title: 'Erro',
-            description:
-              response.message || 'Não foi possível iniciar o pagamento',
-            variant: 'destructive',
-          });
-          navigate('/checkout/identification');
-          return false;
-        }
-      } catch (error) {
-        console.error('Erro ao inicializar pagamento:', error);
-        toast({
-          title: 'Erro de conexão',
-          description: 'Não foi possível se conectar ao servidor de pagamento',
-          variant: 'destructive',
-        });
-        return false;
-      }
-    },
-    [navigate]
-  );
-
-  // Direcionar para a confirmação após pagamento bem-sucedido
-  const handlePaymentSuccess = useCallback(
-    (responseData, method) => {
-      // Armazenar dados para a página de confirmação
-      sessionStorage.setItem(
-        'paymentResult',
-        JSON.stringify({
-          ...responseData,
-          orderId: orderInfo.id,
-          paymentMethod: method,
-        })
-      );
-
-      // Limpar carrinho e navegar para a página de confirmação
-      clearCart();
-      navigate('/checkout/confirmation');
-    },
-    [clearCart, navigate, orderInfo]
-  );
-
-  return {
-    paymentMethod,
-    setPaymentMethod,
-    processing,
-    setProcessing,
-    orderInfo,
-    paymentData,
-    pixData,
-    setPixData,
-    checkingPixStatus,
-    setCheckingPixStatus,
-    initializeOrder,
-    handlePaymentSuccess,
-  };
+// Formato de moeda brasileiro
+const FormatCurrency = ({ value }) => {
+  return new Intl.NumberFormat('pt-BR', {
+    style: 'currency',
+    currency: 'BRL',
+  }).format(value);
 };
 
-// Hook específico para pagamentos PIX
-const usePixPayment = (
-  orderInfo,
-  setProcessing,
-  setPixData,
-  setCheckingPixStatus,
-  handlePaymentSuccess
-) => {
-  // Gerar código PIX
-  const handleGeneratePixCode = useCallback(async () => {
-    if (!orderInfo) return;
+// Hook para gerenciar métodos de pagamento
+const usePaymentMethods = () => {
+  const [selectedMethod, setSelectedMethod] = useState('credit_card');
 
-    setProcessing(true);
-    try {
-      const response = await generatePixPayment(orderInfo.id);
-
-      if (response.success) {
-        setPixData(response.data);
-        toast({
-          title: 'Código PIX gerado',
-          description: 'Escaneie o QR code com o app do seu banco para pagar.',
-        });
-      } else {
-        toast({
-          title: 'Erro ao gerar PIX',
-          description: response.message,
-          variant: 'destructive',
-        });
-      }
-    } catch (error) {
-      console.error('Erro ao gerar código PIX:', error);
-      toast({
-        title: 'Erro',
-        description: 'Não foi possível gerar o código PIX',
-        variant: 'destructive',
-      });
-    } finally {
-      setProcessing(false);
-    }
-  }, [orderInfo, setProcessing, setPixData]);
-
-  // Verificar status do pagamento PIX
-  const handleCheckPixStatus = useCallback(
-    async (pixData) => {
-      if (!pixData?.transactionId) {
-        toast({
-          title: 'Erro',
-          description: 'Informações de pagamento não encontradas',
-          variant: 'destructive',
-        });
-        return;
-      }
-
-      setCheckingPixStatus(true);
-      try {
-        const response = await checkPaymentStatus(pixData.transactionId);
-
-        if (response.success) {
-          if (response.data.status === 'approved') {
-            toast({
-              title: 'Pagamento confirmado!',
-              description: 'Seu pagamento foi processado com sucesso.',
-            });
-
-            handlePaymentSuccess(response.data, 'pix');
-          } else {
-            toast({
-              title: 'Pagamento pendente',
-              description:
-                'Ainda não identificamos seu pagamento. Tente novamente em alguns instantes.',
-              variant: 'warning',
-            });
-          }
-        } else {
-          toast({
-            title: 'Erro',
-            description: response.message || 'Erro ao verificar pagamento',
-            variant: 'destructive',
-          });
-        }
-      } catch (error) {
-        console.error('Erro ao verificar status do pagamento:', error);
-        toast({
-          title: 'Erro',
-          description: 'Não foi possível verificar o status do pagamento',
-          variant: 'destructive',
-        });
-      } finally {
-        setCheckingPixStatus(false);
-      }
-    },
-    [setCheckingPixStatus, handlePaymentSuccess]
-  );
-
-  return {
-    handleGeneratePixCode,
-    handleCheckPixStatus,
-  };
-};
-
-// Hook para lidar com pagamentos de cartão e boleto
-const useOtherPayments = (orderInfo, setProcessing, handlePaymentSuccess) => {
-  const handleCardPayment = useCallback(
-    async (paymentDetails) => {
-      if (!orderInfo) return;
-
-      // Formatação do número de identificação - remover caracteres não numéricos
-      if (paymentDetails.identificationNumber) {
-        paymentDetails.identificationNumber =
-          paymentDetails.identificationNumber.replace(/\D/g, '');
-      }
-
-      // Garantir que temos um valor numérico para o total
-      const totalAmount = orderInfo.total
-        ? parseFloat(String(orderInfo.total).replace(/[^\d.]/g, ''))
-        : 100.0;
-
-      // Adicionar flag de teste para indicar ambiente de desenvolvimento sem webhook
-      const isTestEnvironment = true; // Em produção, mudar para false
-
-      console.log('Dados do cartão formatados:', {
-        ...paymentDetails,
-        token: paymentDetails.token ? 'TOKEN_PRESENT' : 'NO_TOKEN',
-        identificationNumber: paymentDetails.identificationNumber || 'VAZIO',
-        amount: totalAmount,
-        testEnvironment: isTestEnvironment,
-      });
-
-      // Validar CPF/CNPJ
-      if (
-        !paymentDetails.identificationNumber ||
-        paymentDetails.identificationNumber.length < 11
-      ) {
-        toast({
-          title: 'CPF/CNPJ inválido',
-          description: 'Por favor, informe um número de documento válido.',
-          variant: 'destructive',
-        });
-        return;
-      }
-
-      setProcessing(true);
-      try {
-        const response = await processCardPayment({
-          orderId: orderInfo.id,
-          // Passar o valor em múltiplos formatos para garantir compatibilidade
-          amount: totalAmount,
-          transaction_amount: totalAmount,
-          transactionAmount: totalAmount,
-          // Indicar explicitamente que estamos em ambiente sem webhook configurado
-          useTestMode: isTestEnvironment,
-          skipWebhookValidation: true,
-          ...paymentDetails,
-        });
-
-        if (response.success) {
-          handlePaymentSuccess(response.data, 'credit-card');
-        } else {
-          toast({
-            title: 'Erro no pagamento',
-            description: response.message,
-            variant: 'destructive',
-          });
-        }
-      } catch (error) {
-        console.error('Erro ao processar pagamento com cartão:', error);
-        toast({
-          title: 'Erro',
-          description: 'Não foi possível processar seu pagamento com cartão',
-          variant: 'destructive',
-        });
-      } finally {
-        setProcessing(false);
-      }
-    },
-    [orderInfo, setProcessing, handlePaymentSuccess]
-  );
-
-  const handleBankSlipPayment = useCallback(
-    async (customerInfo) => {
-      if (!orderInfo) return;
-
-      setProcessing(true);
-      try {
-        const response = await generateBankSlip(orderInfo.id, customerInfo);
-
-        if (response.success) {
-          handlePaymentSuccess(response.data, 'bank-slip');
-        } else {
-          toast({
-            title: 'Erro ao gerar boleto',
-            description: response.message,
-            variant: 'destructive',
-          });
-        }
-      } catch (error) {
-        console.error('Erro ao gerar boleto:', error);
-        toast({
-          title: 'Erro',
-          description: 'Não foi possível gerar o boleto bancário',
-          variant: 'destructive',
-        });
-      } finally {
-        setProcessing(false);
-      }
-    },
-    [orderInfo, setProcessing, handlePaymentSuccess]
-  );
-
-  return {
-    handleCardPayment,
-    handleBankSlipPayment,
-  };
-};
-
-// Componente de seleção de método de pagamento
-const PaymentMethodSelection = ({ value, onChange }) => {
   const paymentMethods = [
     {
-      id: 'credit-card',
-      title: 'Cartão de Crédito',
-      description: 'Visa, Mastercard, Elo, etc.',
-      icon: <CreditCard className="mr-2 h-5 w-5 text-primary" />,
+      id: 'credit_card',
+      name: 'Cartão de Crédito',
+      icon: <CreditCard size={18} />,
+      description: 'Pague em até 12x',
     },
     {
       id: 'pix',
-      title: 'Pix',
+      name: 'PIX',
+      icon: <QrCode size={18} />,
       description: '5% de desconto',
-      icon: <QrCode className="mr-2 h-5 w-5 text-primary" />,
-      badge: <Badge className="ml-2 bg-green-100 text-green-700">-5%</Badge>,
     },
     {
-      id: 'bank-slip',
-      title: 'Boleto Bancário',
-      description: 'Pagamento em até 3 dias úteis',
-      icon: <Receipt className="mr-2 h-5 w-5 text-primary" />,
+      id: 'boleto',
+      name: 'Boleto',
+      icon: <Receipt size={18} />,
+      description: 'Prazo de 3 dias úteis',
     },
   ];
 
-  return (
-    <Card>
-      <CardContent className="pt-6">
-        <h2 className="text-lg font-semibold mb-4">Forma de pagamento</h2>
-
-        <RadioGroup
-          value={value}
-          onValueChange={onChange}
-          className="space-y-4"
-        >
-          {paymentMethods.map((method) => (
-            <div
-              key={method.id}
-              className={`flex items-center space-x-3 border rounded-lg p-4 cursor-pointer hover:bg-gray-50 transition-colors ${
-                value === method.id ? 'border-primary bg-primary/5' : ''
-              }`}
-            >
-              <RadioGroupItem value={method.id} id={method.id} />
-              <label
-                htmlFor={method.id}
-                className="flex-1 cursor-pointer flex items-center"
-              >
-                <div className="flex-1">
-                  <div className="font-medium flex items-center">
-                    {method.icon}
-                    {method.title}
-                    {method.badge}
-                  </div>
-                  <div className="text-sm text-gray-500">
-                    {method.description}
-                  </div>
-                </div>
-              </label>
-            </div>
-          ))}
-        </RadioGroup>
-      </CardContent>
-    </Card>
-  );
+  return {
+    selectedMethod,
+    setSelectedMethod,
+    paymentMethods,
+  };
 };
 
-// Componente principal da página
+// Componente principal
 const Payment = () => {
-  const { isAuthenticated, user } = useAuth();
-  const { items, subtotal, clearCart } = useCart();
   const navigate = useNavigate();
+  const { user, isAuthenticated } = useAuth();
+  const { items, subtotal, clearCart } = useCart();
+  const { selectedMethod, setSelectedMethod, paymentMethods } =
+    usePaymentMethods();
+  const [loading, setLoading] = useState(false);
+  const [shippingInfo, setShippingInfo] = useState(null);
+  const [orderId, setOrderId] = useState(null);
+  const [loadingCart, setLoadingCart] = useState(true);
+  const [pixData, setPixData] = useState(null);
+  const [boletoData, setBoletoData] = useState(null);
+  const [paymentComplete, setPaymentComplete] = useState(false);
 
-  // Gerenciamento de estado do pagamento usando nossos hooks customizados
-  const {
-    paymentMethod,
-    setPaymentMethod,
-    processing,
-    setProcessing,
-    orderInfo,
-    paymentData,
-    pixData,
-    setPixData,
-    checkingPixStatus,
-    setCheckingPixStatus,
-    initializeOrder,
-    handlePaymentSuccess,
-  } = usePaymentState(clearCart, navigate);
-
-  // Hook de pagamento PIX
-  const { handleGeneratePixCode, handleCheckPixStatus } = usePixPayment(
-    orderInfo,
-    setProcessing,
-    setPixData,
-    setCheckingPixStatus,
-    handlePaymentSuccess
-  );
-
-  // Hook para outros pagamentos
-  const { handleCardPayment, handleBankSlipPayment } = useOtherPayments(
-    orderInfo,
-    setProcessing,
-    handlePaymentSuccess
-  );
-
-  // Inicializar dados do pedido
+  // Verificar se o usuário está autenticado e tem itens no carrinho
   useEffect(() => {
-    // Verificar se o usuário está logado
     if (!isAuthenticated) {
-      navigate('/login?redirect=/checkout/payment');
+      // Só redirecionar para login se user for undefined (ainda não carregou)
+      if (user === undefined) {
+        navigate('/login?redirect=/checkout/payment');
+      }
       return;
     }
 
-    // Verificar se há itens no carrinho
-    if (items.length === 0) {
-      navigate('/checkout/cart');
+    // Recuperar informações de envio da sessão primeiro
+    const storedShippingInfo = sessionStorage.getItem('shippingInfo');
+    if (!storedShippingInfo) {
+      navigate('/checkout/identification');
       return;
     }
 
-    initializeOrder(items, subtotal);
-  }, [isAuthenticated, items, subtotal, navigate, initializeOrder]);
+    setShippingInfo(JSON.parse(storedShippingInfo)); // Verificação do carrinho com delay para dar tempo de carregar
+    const checkCartTimer = setTimeout(() => {
+      setLoadingCart(false);
+      // Só verificamos o carrinho depois de um tempo para garantir que foi carregado
+      // E apenas se não for uma sessão que já estava em andamento
+      const inProgressOrder = sessionStorage.getItem('orderInProgress');
+      if (items.length === 0 && !inProgressOrder) {
+        navigate('/checkout/cart');
+        return;
+      }
+    }, 1000);
+    return () => clearTimeout(checkCartTimer);
+  }, [isAuthenticated, navigate, items]);
 
-  // Se não estiver autenticado ou não houver itens, não renderiza
-  if (!isAuthenticated || items.length === 0) {
-    return null;
+  // Verificar se temos um pedido em andamento salvo na sessão
+  useEffect(() => {
+    const inProgressOrder = sessionStorage.getItem('orderInProgress');
+    if (inProgressOrder) {
+      try {
+        const orderData = JSON.parse(inProgressOrder);
+        setOrderId(orderData.orderId);
+
+        // Se temos dados de PIX no sessionStorage, recuperar
+        if (orderData.pixData) {
+          setPixData(orderData.pixData);
+        }
+
+        // Se o pagamento foi marcado como completo
+        if (orderData.completed) {
+          setPaymentComplete(true);
+        }
+      } catch (error) {
+        console.error('Erro ao processar pedido em andamento:', error);
+      }
+    }
+  }, []);
+
+  // Salvar estado do método de pagamento selecionado no sessionStorage
+  useEffect(() => {
+    if (selectedMethod) {
+      sessionStorage.setItem('paymentMethod', selectedMethod);
+    }
+  }, [selectedMethod]);
+
+  // Recuperar método de pagamento salvo anteriormente
+  useEffect(() => {
+    const savedMethod = sessionStorage.getItem('paymentMethod');
+    if (savedMethod) {
+      setSelectedMethod(savedMethod);
+    }
+  }, []);
+  // Função para processar pagamento
+  const handlePaymentSubmit = async (paymentData) => {
+    console.log('handlePaymentSubmit chamado com:', paymentData);
+  };
+
+  // Se o pagamento foi concluído, limpar carrinho e redirecionar
+  useEffect(() => {
+    if (paymentComplete && orderId) {
+      clearCart();
+      sessionStorage.removeItem('orderInProgress');
+      navigate(`/checkout/confirmation/${orderId}`);
+    }
+  }, [paymentComplete, orderId, navigate, clearCart]);
+
+  // Só renderizar null se o usuário não estiver autenticado e o user for diferente de undefined
+  // Se user for undefined, ainda está carregando o status de autenticação
+  if (!isAuthenticated && user !== undefined) return null;
+
+  // Mostra um estado de carregamento enquanto verificamos o carrinho ou os itens ainda não carregaram
+  if (loadingCart || (!isAuthenticated && user === undefined) || !items) {
+    return (
+      <LayoutCheckout activeStep={3}>
+        <div className="flex justify-center items-center min-h-[50vh]">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-black mx-auto mb-4"></div>
+            <p className="text-gray-600">Carregando informações do pedido...</p>
+          </div>
+        </div>
+      </LayoutCheckout>
+    );
   }
+  if (!shippingInfo) return null;
+  // Calcular valores
+  const shipping = shippingInfo?.cost || 0;
+  const subtotalValue = parseFloat(subtotal) || 0;
+  const pixDiscount = selectedMethod === 'pix' ? subtotalValue * 0.05 : 0;
+  const total =
+    subtotalValue + shipping - (selectedMethod === 'pix' ? pixDiscount : 0);
+
+  // Componente com informações de entrega
+  const ShippingInfoCard = ({ shippingInfo }) => (
+    <div className="mt-4 bg-blue-50 p-4 rounded-lg">
+      <h3 className="font-medium text-blue-700 mb-2">Informações de entrega</h3>
+      {shippingInfo && shippingInfo.address && (
+        <div className="text-sm space-y-1">
+          <p className="font-medium">{shippingInfo.address.name}</p>
+          <p>
+            {shippingInfo.address.street}, {shippingInfo.address.number}
+          </p>
+          {shippingInfo.address.complement && (
+            <p>{shippingInfo.address.complement}</p>
+          )}
+          <p>
+            {shippingInfo.address.neighborhood} - {shippingInfo.address.city},{' '}
+            {shippingInfo.address.state}
+          </p>
+          <p>{shippingInfo.address.zipCode}</p>
+        </div>
+      )}
+      <Button
+        variant="link"
+        className="text-blue-700 p-0 h-auto mt-2"
+        onClick={() => navigate('/checkout/identification')}
+      >
+        Alterar endereço
+      </Button>
+    </div>
+  );
+
+  // Componente de resumo do pedido simplificado
+  const PaymentSummary = ({
+    items,
+    subtotal,
+    shipping,
+    pixDiscount,
+    selectedMethod,
+  }) => (
+    <div className="bg-white p-5 rounded-lg shadow-sm">
+      <div className="font-semibold mb-3">Resumo da compra</div>
+      <div className="flex flex-col gap-2 text-sm">
+        <div className="flex justify-between">
+          <span>
+            Valor dos produtos ({items.length}{' '}
+            {items.length === 1 ? 'item' : 'itens'})
+          </span>
+          <span>
+            <FormatCurrency value={subtotal} />
+          </span>
+        </div>
+
+        <div className="flex justify-between">
+          <span>Frete</span>
+          <span>
+            {shipping === 0 ? (
+              <span className="text-green-600 font-medium">Grátis</span>
+            ) : (
+              <FormatCurrency value={shipping} />
+            )}
+          </span>
+        </div>
+
+        {selectedMethod === 'pix' && (
+          <div className="flex justify-between text-green-600 text-sm">
+            <span className="flex items-center gap-1">
+              <Check size={14} />
+              Desconto Pix (5%)
+            </span>
+            <span>
+              - <FormatCurrency value={pixDiscount} />
+            </span>
+          </div>
+        )}
+
+        <Separator className="my-2" />
+
+        <div className="flex justify-between font-bold text-base">
+          <span>Total</span>
+          <span>
+            <FormatCurrency value={total} />
+          </span>
+        </div>
+      </div>
+
+      <div className="mt-4 text-xs text-gray-500 space-y-1">
+        <div className="flex items-center gap-1">
+          <Check size={12} className="text-green-500" />
+          <span>Compra segura</span>
+        </div>
+        <div className="flex items-center gap-1">
+          <Check size={12} className="text-green-500" />
+          <span>Site criptografado</span>
+        </div>
+      </div>
+    </div>
+  );
 
   return (
     <LayoutCheckout activeStep={3}>
-      <div className="max-w-5xl mx-auto px-4 py-8">
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        className="max-w-5xl mx-auto px-4 py-8"
+      >
+        <div className="flex items-center gap-2 mb-6">
+          <Button
+            variant="outline"
+            size="icon"
+            onClick={() => navigate('/checkout/identification')}
+          >
+            <ArrowLeft size={16} />
+          </Button>
+          <h1 className="text-xl font-bold">Forma de pagamento</h1>
+        </div>
+
         <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-          <div className="md:col-span-2 space-y-6">
-            {/* Seleção de método de pagamento */}
-            <PaymentMethodSelection
-              value={paymentMethod}
-              onChange={setPaymentMethod}
-            />
+          <div className="md:col-span-2">
+            <div className="bg-white rounded-lg shadow-sm overflow-hidden">
+              <Tabs
+                defaultValue={selectedMethod}
+                onValueChange={setSelectedMethod}
+                className="w-full"
+              >
+                <TabsList className="grid grid-cols-3 h-auto bg-gray-50 p-0 border-b">
+                  {paymentMethods.map((method) => (
+                    <TabsTrigger
+                      key={method.id}
+                      value={method.id}
+                      className="flex flex-col items-center py-4 px-2 gap-1 data-[state=active]:bg-white rounded-none border-b-2 data-[state=active]:border-black data-[state=inactive]:border-transparent"
+                    >
+                      <div className="flex items-center gap-2">
+                        {method.icon}
+                        <span>{method.name}</span>
+                      </div>
+                      <span className="text-xs text-gray-500">
+                        {method.description}
+                      </span>
+                    </TabsTrigger>
+                  ))}
+                </TabsList>
 
-            {/* Formulário específico do método de pagamento */}
-            <Card>
-              <CardContent className="pt-6">
-                {paymentMethod === 'credit-card' && (
-                  <CreditCardForm
-                    onSubmit={handleCardPayment}
-                    processing={processing}
-                  />
-                )}
-
-                {paymentMethod === 'pix' && (
-                  <PixPayment
-                    onGenerateCode={handleGeneratePixCode}
-                    onVerifyPayment={() => handleCheckPixStatus(pixData)}
-                    pixData={pixData}
-                    processing={processing}
-                    checkingStatus={checkingPixStatus}
-                  />
-                )}
-
-                {paymentMethod === 'bank-slip' && (
-                  <BankSlipPayment
-                    onGenerateBankSlip={handleBankSlipPayment}
-                    paymentData={paymentData?.bankSlip}
-                    processing={processing}
-                  />
-                )}
-              </CardContent>
-            </Card>
+                <div className="p-6">
+                  <TabsContent value="credit_card" className="mt-0">
+                    <CreditCardForm
+                      onSubmit={(cardData) =>
+                        handlePaymentSubmit({
+                          ...cardData,
+                          paymentMethod: 'credit_card',
+                        })
+                      }
+                      loading={loading}
+                    />
+                  </TabsContent>{' '}
+                  <TabsContent value="pix" className="mt-0">
+                    <PixPaymentForm
+                      onSubmit={() =>
+                        handlePaymentSubmit({
+                          paymentMethod: 'pix',
+                        })
+                      }
+                      loading={loading}
+                    />
+                  </TabsContent>
+                  <TabsContent value="boleto" className="mt-0">
+                    <BoletoPaymentForm
+                      onSubmit={() =>
+                        handlePaymentSubmit({ paymentMethod: 'boleto' })
+                      }
+                      loading={loading}
+                    />
+                  </TabsContent>
+                </div>
+              </Tabs>
+            </div>
           </div>
 
-          {/* Resumo do pedido (coluna à direita) */}
           <div className="md:col-span-1">
-            <OrderSummary
+            <PaymentSummary
               items={items}
               subtotal={subtotal}
-              shippingInfo={JSON.parse(
-                sessionStorage.getItem('shippingInfo') || '{}'
-              )}
-              paymentMethod={paymentMethod}
-              disableContinue={true} // Botão de continuar desabilitado, pois os componentes de pagamento têm seus próprios botões
+              shipping={shipping}
+              pixDiscount={pixDiscount}
+              selectedMethod={selectedMethod}
             />
+
+            <ShippingInfoCard shippingInfo={shippingInfo} />
           </div>
         </div>
-      </div>
+      </motion.div>
     </LayoutCheckout>
   );
 };

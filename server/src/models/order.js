@@ -45,6 +45,12 @@ const orderSchema = new mongoose.Schema(
       update_time: String,
       email_address: String,
     },
+    paymentExpiresAt: {
+      type: Date,
+      default: function () {
+        return new Date(+new Date() + 24 * 60 * 60 * 1000); // 24 horas por padrão
+      },
+    },
     subtotalPrice: {
       type: Number,
       required: true,
@@ -62,7 +68,6 @@ const orderSchema = new mongoose.Schema(
     totalPrice: {
       type: Number,
       required: true,
-      default: 0.0,
     },
     couponApplied: {
       type: mongoose.Schema.Types.ObjectId,
@@ -79,7 +84,7 @@ const orderSchema = new mongoose.Schema(
     status: {
       type: String,
       required: true,
-      enum: ['pending', 'processing', 'shipped', 'delivered', 'cancelled'],
+      enum: ['pending', 'processing', 'failed', 'delivered', 'cancelled'],
       default: 'pending',
     },
     trackingNumber: String,
@@ -87,6 +92,11 @@ const orderSchema = new mongoose.Schema(
     deliveredAt: Date,
     cancelledAt: Date,
     cancellationReason: String,
+    sessionId: {
+      type: String,
+      default: null,
+      index: true, // Ajuda na performance de consultas por sessionId
+    },
   },
   {
     timestamps: true,

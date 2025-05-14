@@ -2,7 +2,6 @@ import cors from 'cors';
 import express from 'express';
 import { swaggerDocs, swaggerUi } from './config/swagger.js';
 import errorHandler from './middlewares/errorHandler.js';
-import rateLimiter from './middlewares/rateLimiter.js';
 import routes from './routes/index.js';
 
 const app = express();
@@ -20,7 +19,7 @@ const corsOptions = {
 
 // Middlewares
 app.use(express.json());
-app.use(cors(corsOptions));
+app.use(cors());
 // app.use(rateLimiter);
 
 // Rota de saúde
