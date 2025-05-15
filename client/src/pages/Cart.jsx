@@ -11,6 +11,7 @@ import {
 import { useCart } from '@/contexts/CartContext';
 import { toast } from '@/hooks/use-toast';
 import LayoutCheckout from '@/layout/LayoutCheckout';
+import { validateCoupon } from '@/services/coupon.service';
 import { AnimatePresence, motion } from 'framer-motion';
 import {
   ArrowRight,
@@ -150,20 +151,91 @@ const CartItem = ({ item, updateQuantity, removeItem, loading }) => {
 
 const Cart = () => {
   const [coupon, setCoupon] = useState('');
+  const [couponLoading, setCouponLoading] = useState(false);
+  const [couponError, setCouponError] = useState(null);
+
   const [cep, setCep] = useState('');
   const [giftChecked, setGiftChecked] = useState(false);
   const [calculatingShipping, setCalculatingShipping] = useState(false);
   const [shippingMethods, setShippingMethods] = useState([]);
   const [selectedShipping, setSelectedShipping] = useState(null);
 
-  const { items, updateQuantity, removeItem, subtotal, cartCount, loading } =
-    useCart();
+  const {
+    items,
+    updateQuantity,
+    removeItem,
+    subtotal,
+    cartCount,
+    applyCoupon,
+    appliedCoupon,
+    totalWithDiscounts,
+    pixDiscount,
+    loading,
+  } = useCart();
 
   const navigate = useNavigate();
 
-  // Calcular o valor do desconto do Pix (5%)
-  const pixDiscount = parseFloat(subtotal) * 0.05;
-  const totalWithPixDiscount = parseFloat(subtotal) - pixDiscount;
+  const handleValidateCoupon = async () => {
+    if (!coupon.trim()) return;
+
+    setCouponLoading(true);
+    setCouponError('');
+
+    try {
+      // Preparar os dados do carrinho para validação
+      const cartData = {
+        cartTotal: parseFloat(subtotal),
+        cartItems: items.map((item) => ({
+          sneakerId: item.sneakerId,
+          price: item.price,
+          quantity: item.quantity,
+          categoryId: item.categoryId, // Adicione se disponível
+        })),
+      };
+
+      const response = await validateCoupon(coupon, cartData);
+
+      if (response.success) {
+        applyCoupon(response.data);
+        setCoupon('');
+        toast({
+          title: 'Cupom aplicado',
+          description: `Desconto de ${new Intl.NumberFormat('pt-BR', {
+            style: 'currency',
+            currency: 'BRL',
+          }).format(response.data.discountAmount)} aplicado à sua compra.`,
+          variant: 'success',
+        });
+      } else {
+        setCouponError(response.message || 'Cupom inválido');
+        toast({
+          title: 'Erro ao aplicar cupom',
+          description: response.message || 'Este cupom não existe ou expirou',
+          variant: 'destructive',
+        });
+      }
+    } catch (error) {
+      console.error('Erro ao validar cupom:', error);
+      setCouponError('Erro ao validar o cupom. Tente novamente.');
+      toast({
+        title: 'Erro',
+        description: 'Não foi possível validar o cupom. Tente novamente.',
+        variant: 'destructive',
+      });
+    } finally {
+      setCouponLoading(false);
+    }
+  };
+
+  // Função para remover o cupom aplicado
+  const removeCoupon = () => {
+    applyCoupon(null);
+    toast({
+      title: 'Cupom removido',
+      description: 'O cupom foi removido da sua compra.',
+      variant: 'default',
+    });
+  };
 
   // Função para continuar para o próximo passo
   const handleContinue = () => {
@@ -386,29 +458,58 @@ const Cart = () => {
           {/* Cupom de desconto */}
           <div className="bg-white p-5 rounded-lg shadow-sm">
             <div className="font-semibold mb-3">Cupom de desconto</div>
-            <div className="flex gap-2">
-              <Input
-                placeholder="Digite o cupom"
-                value={coupon}
-                onChange={(e) => setCoupon(e.target.value)}
-                className="bg-gray-50"
-              />
-              <Button
-                variant="outline"
-                disabled={!coupon.trim()}
-                onClick={() => {
-                  toast({
-                    title: 'Cupom inválido',
-                    description: 'Este cupom não existe ou expirou',
-                    variant: 'destructive',
-                  });
-                }}
-              >
-                Aplicar
-              </Button>
-            </div>
+            {appliedCoupon ? (
+              <div className="border border-green-200 bg-green-50 rounded-md p-3 mb-3">
+                <div className="flex justify-between items-center">
+                  <div>
+                    <div className="flex items-center">
+                      <CheckIcon size={16} className="text-green-600 mr-2" />
+                      <span className="font-medium">{appliedCoupon.code}</span>
+                    </div>
+                    <p className="text-xs text-gray-600 mt-1">
+                      {appliedCoupon.description}
+                    </p>
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={removeCoupon}
+                    className="h-8 text-gray-500 hover:text-red-500"
+                  >
+                    <X size={16} />
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <div className="flex gap-2">
+                <Input
+                  placeholder="Digite o cupom"
+                  value={coupon}
+                  onChange={(e) => setCoupon(e.target.value)}
+                  className="bg-gray-50"
+                />
+                <Button
+                  variant="outline"
+                  disabled={!coupon.trim() || couponLoading}
+                  onClick={handleValidateCoupon}
+                >
+                  {couponLoading ? (
+                    <>
+                      <Loader2 size={14} className="animate-spin mr-1" />
+                      Aplicando
+                    </>
+                  ) : (
+                    'Aplicar'
+                  )}
+                </Button>
+              </div>
+            )}
 
-            <div className="flex items-start mt-4">
+            {couponError && (
+              <p className="text-xs text-red-500 mt-1">{couponError}</p>
+            )}
+
+            {/* <div className="flex items-start mt-4">
               <Checkbox
                 id="gift"
                 checked={giftChecked}
@@ -426,7 +527,7 @@ const Cart = () => {
                   Você poderá usá-los na etapa de pagamento.
                 </p>
               </div>
-            </div>
+            </div> */}
           </div>
 
           {/* Resumo */}
@@ -517,7 +618,7 @@ const Cart = () => {
                   <span>
                     <FormatCurrency
                       value={
-                        totalWithPixDiscount +
+                        totalWithDiscounts +
                         (selectedShipping && parseFloat(subtotal) < 300
                           ? shippingMethods.find(
                               (m) => m.id === selectedShipping

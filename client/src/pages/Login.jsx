@@ -105,7 +105,11 @@ const Login = () => {
             <p className="text-sm text-gray-600">
               Não tem uma conta?{' '}
               <Link
-                to="/register"
+                to={
+                  from === '/checkout/identification'
+                    ? '/register?redirect=/checkout/identification'
+                    : '/register'
+                }
                 className="text-blue-600 hover:underline font-semibold"
               >
                 Registre-se

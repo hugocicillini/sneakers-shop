@@ -9,7 +9,6 @@ import { getSneakers } from '@/services/sneakers.service';
 import { ChevronDown } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import Filter from './Filter';
 import {
   Pagination,
   PaginationContent,
@@ -19,6 +18,7 @@ import {
   PaginationNext,
   PaginationPrevious,
 } from '../ui/pagination';
+import Filter from './Filter';
 import SneakersList from './SneakersList';
 
 const Sneakers = ({ search }) => {
@@ -155,7 +155,6 @@ const Sneakers = ({ search }) => {
 
     setActiveFilters(filtersWithCurrentSort);
     setCurrentPage(1); // Resetar para a primeira página ao aplicar filtros
-    fetchSneakers(filtersWithCurrentSort);
     setIsFilterOpen(false);
   };
 
@@ -178,7 +177,6 @@ const Sneakers = ({ search }) => {
 
     // Buscar com nova ordenação
     setCurrentPage(1);
-    fetchSneakers(newFilters);
   };
 
   const getCurrentSortLabel = () => {
@@ -266,7 +264,7 @@ const Sneakers = ({ search }) => {
             </div>
           </div>
 
-          <SneakersList sneakers={sneakersList} fetchSneakers={fetchSneakers} />
+          <SneakersList sneakers={sneakersList}/>
 
           {totalSneakers > 0 && (
             <div className="mt-8 flex justify-center">

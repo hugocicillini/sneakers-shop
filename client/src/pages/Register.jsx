@@ -5,9 +5,19 @@ import { Label } from '@/components/ui/label';
 import { useAuth } from '@/contexts/AuthContext';
 import LayoutBase from '@/layout/LayoutBase';
 import { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 
 const Register = () => {
+  const location = useLocation();
+
+  const searchParams = new URLSearchParams(location.search);
+  const redirectUrl = searchParams.get('redirect');
+
+  let from = location.state?.from?.pathname || '/';
+  if (redirectUrl) {
+    from = redirectUrl.startsWith('/') ? redirectUrl : `/${redirectUrl}`;
+  }
+
   const [formData, setFormData] = useState({
     name: '',
     email: '',
@@ -142,7 +152,11 @@ const Register = () => {
             <p className="text-sm text-gray-600">
               Já tem uma conta?{' '}
               <Link
-                to="/login"
+                to={
+                  from === '/checkout/identification'
+                    ? '/login?redirect=/checkout/identification'
+                    : '/login'
+                }
                 className="text-blue-600 hover:underline font-semibold"
               >
                 Faça login

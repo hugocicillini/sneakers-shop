@@ -208,9 +208,7 @@ const Identification = () => {
   // Buscar dados do usuário e endereço
   useEffect(() => {
     if (!isAuthenticated) {
-      if (user === undefined) {
-        navigate('/login?redirect=/checkout/identification');
-      }
+      navigate('/login?redirect=/checkout/identification');
       return;
     }
 

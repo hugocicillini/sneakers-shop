@@ -1,5 +1,3 @@
-import AddressDialog from '@/components/user/Addresses';
-import ProfileDialog from '@/components/user/Profile';
 import {
   Card,
   CardContent,
@@ -8,6 +6,8 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card';
+import AddressDialog from '@/components/user/Addresses';
+import ProfileDialog from '@/components/user/Profile';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from '@/hooks/use-toast';
 import LayoutBase from '@/layout/LayoutBase';
@@ -19,7 +19,7 @@ import {
 } from '@/services/addresses.service';
 import { getUser, updateUser } from '@/services/users.service';
 import { ChevronDown, ChevronUp, Loader2, Package } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 const Account = () => {
   const { user, updateUserData } = useAuth();
@@ -73,14 +73,16 @@ const Account = () => {
   const [loading, setLoading] = useState(true);
   const [userData, setUserData] = useState(null);
   const [addresses, setAddresses] = useState([]);
+  const hasFetchedRef = useRef(false);
 
   useEffect(() => {
     const fetchUserData = async () => {
-      if (!user) {
+      if (!user || hasFetchedRef.current) {
         setLoading(false);
         return;
       }
 
+      hasFetchedRef.current = true;
       setLoading(true);
       try {
         const [userResponse, addressResponse] = await Promise.all([

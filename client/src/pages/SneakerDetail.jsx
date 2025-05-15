@@ -9,10 +9,11 @@ import { useEffect, useState } from 'react';
 import { Link, useLocation, useParams } from 'react-router-dom';
 
 import CarouselSneakers from '@/components/sneaker/CarouselSneakers';
-import Delivery from '@/components/sneaker/Shipping';
 import ImageGallery from '@/components/sneaker/ImageGallery';
+import Delivery from '@/components/sneaker/Shipping';
 import SneakerInfo from '@/components/sneaker/SneakerInfo';
 import ToggleFavorite from '@/components/sneaker/ToggleFavorite';
+import { useRef } from 'react';
 
 const SneakerDetail = () => {
   const { slug } = useParams();
@@ -38,11 +39,19 @@ const SneakerDetail = () => {
   });
 
   const { addItem, toggleCart } = useCart();
+  const hasFetchedRef = useRef(false);
 
   useEffect(() => {
     const fetchSneaker = async () => {
       try {
         setLoading(true);
+
+        if (hasFetchedRef.current) {
+          return;
+        }
+        
+        hasFetchedRef.current = true;
+
         const sneakerData = await getSneakerBySlug(slug, colorParam);
         setSneaker(sneakerData);
 

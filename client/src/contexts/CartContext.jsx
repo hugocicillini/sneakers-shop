@@ -1,7 +1,13 @@
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from '@/hooks/use-toast';
 import * as cartService from '@/services/cart.service';
-import { createContext, useContext, useEffect, useReducer } from 'react';
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useReducer,
+  useRef,
+} from 'react';
 
 // Definição de contexto e estado inicial
 const CartContext = createContext();
@@ -11,6 +17,7 @@ const initialState = {
   isOpen: false,
   loading: false,
   error: null,
+  appliedCoupon: null,
 };
 
 // Reducer simplificado para gerenciar o carrinho
@@ -68,6 +75,64 @@ function cartReducer(state, action) {
     case 'SET_CART_OPEN':
       return { ...state, isOpen: action.payload };
 
+    // No reducer, modifique o case 'SET_COUPON':
+    case 'SET_COUPON':
+      // Se estamos aplicando um cupom
+      if (action.payload) {
+        const couponData = action.payload;
+        const discount = couponData.discountValue;
+        const discountType = couponData.discountType;
+
+        // Guardar os preços originais e aplicar o desconto em cada item
+        const updatedItems = state.items.map((item) => {
+          // Guardar o preço original se ainda não existir
+          const originalPrice = item.originalPrice || item.price;
+          let discountedPrice = originalPrice;
+
+          // Calcular o preço com desconto
+          if (discountType === 'percentage') {
+            discountedPrice = originalPrice - originalPrice * (discount / 100);
+          } else if (discountType === 'fixed_amount') {
+            // Para desconto de valor fixo, distribuímos proporcionalmente entre os itens
+            const totalItems = state.items.reduce(
+              (sum, i) => sum + i.quantity,
+              0
+            );
+            const itemDiscount = discount / totalItems;
+            discountedPrice = Math.max(0, originalPrice - itemDiscount);
+          }
+
+          return {
+            ...item,
+            originalPrice, // Guardar o preço original
+            price: discountedPrice, // Atualizar para o preço com desconto
+            hasDiscount: true,
+          };
+        });
+
+        return {
+          ...state,
+          appliedCoupon: action.payload,
+          items: updatedItems,
+        };
+      }
+      // Se estamos removendo um cupom
+      else {
+        // Restaurar os preços originais
+        const restoredItems = state.items.map((item) => ({
+          ...item,
+          price: item.originalPrice || item.price, // Restaurar o preço original
+          hasDiscount: false,
+          originalPrice: undefined, // Opcional: remover propriedade de preço original
+        }));
+
+        return {
+          ...state,
+          appliedCoupon: null,
+          items: restoredItems,
+        };
+      }
+
     case 'SET_LOADING':
       return { ...state, loading: action.payload };
 
@@ -83,10 +148,23 @@ function cartReducer(state, action) {
 export function CartProvider({ children }) {
   const [state, dispatch] = useReducer(cartReducer, initialState);
   const { isAuthenticated, user } = useAuth();
+  const hasLoadedCart = useRef(false); // Para evitar recarregar o carrinho se já foi carregado
 
   // Carregar o carrinho - agora depende também do estado de autenticação para recarregar
   // quando o usuário fizer login
   useEffect(() => {
+    // Se o carrinho já foi carregado, não faça nada
+    if (!isAuthenticated || hasLoadedCart.current) return;
+
+    const savedCoupon = localStorage.getItem('appliedCoupon');
+    if (savedCoupon) {
+      try {
+        dispatch({ type: 'SET_COUPON', payload: JSON.parse(savedCoupon) });
+      } catch (e) {
+        localStorage.removeItem('appliedCoupon');
+      }
+    }
+
     const loadCart = async () => {
       dispatch({ type: 'SET_LOADING', payload: true });
 
@@ -101,6 +179,7 @@ export function CartProvider({ children }) {
 
     // Sempre carrega o carrinho, seja do localStorage ou do servidor
     loadCart();
+    hasLoadedCart.current = true; // Marca que o carrinho foi carregado
   }, [isAuthenticated]); // Agora depende de isAuthenticated para recarregar quando o status mudar
 
   // Monitorar quando usuário faz logout e resetar carrinho
@@ -304,6 +383,14 @@ export function CartProvider({ children }) {
 
       if (result.success) {
         dispatch({ type: 'UPDATE_QUANTITY_SUCCESS', payload: result.cart });
+
+        if (state.appliedCoupon) {
+          // Pequeno timeout para garantir que a atualização da quantidade seja processada primeiro
+          setTimeout(() => {
+            // Reaplicar o mesmo cupom para recalcular os descontos
+            dispatch({ type: 'SET_COUPON', payload: state.appliedCoupon });
+          }, 10);
+        }
       } else {
         throw new Error(result.error || 'Erro ao atualizar quantidade');
       }
@@ -348,6 +435,17 @@ export function CartProvider({ children }) {
     dispatch({ type: 'CLEAR_CART_SUCCESS' });
   };
 
+  const applyCoupon = (couponData) => {
+    dispatch({ type: 'SET_COUPON', payload: couponData });
+
+    // Opcional: salvar no localStorage para persistir entre recarregamentos
+    if (couponData) {
+      localStorage.setItem('appliedCoupon', JSON.stringify(couponData));
+    } else {
+      localStorage.removeItem('appliedCoupon');
+    }
+  };
+
   // Funções para controlar a visibilidade do carrinho
   const toggleCart = () => dispatch({ type: 'TOGGLE_CART' });
   const setCartOpen = (isOpen) =>
@@ -368,6 +466,13 @@ export function CartProvider({ children }) {
     }, 0)
     .toFixed(2);
 
+  const pixDiscount = parseFloat(subtotal) * 0.05;
+  const couponDiscount = state.appliedCoupon
+    ? state.appliedCoupon.discountAmount
+    : 0;
+  const totalWithDiscounts =
+    parseFloat(subtotal) - pixDiscount - couponDiscount;
+
   // Valores e funções disponíveis no contexto
   const value = {
     items: state.items,
@@ -377,10 +482,15 @@ export function CartProvider({ children }) {
     cartCount,
     subtotal,
     addItem,
+    pixDiscount,
+    couponDiscount,
+    totalWithDiscounts,
     removeItem,
     updateQuantity,
     clearCart,
-    resetCart, // Adicionada a nova função
+    resetCart,
+    applyCoupon,
+    appliedCoupon: state.appliedCoupon,
     toggleCart,
     setCartOpen,
   };

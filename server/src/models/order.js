@@ -11,7 +11,7 @@ const orderSchema = new mongoose.Schema(
       {
         sneakers: {
           type: mongoose.Schema.Types.ObjectId,
-          ref: 'Sneakers',
+          ref: 'Sneaker',
           required: true,
         },
         variant: {
