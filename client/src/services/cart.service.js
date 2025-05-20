@@ -149,6 +149,8 @@ export const updateCartItemQuantity = async (cartItemId, quantity) => {
   if (quantity < 1)
     return { success: false, error: 'Quantidade deve ser pelo menos 1' };
 
+  console.log('Atualizando quantidade do item:', cartItemId, quantity);
+
   try {
     if (isAuthenticated()) {
       const response = await fetch(

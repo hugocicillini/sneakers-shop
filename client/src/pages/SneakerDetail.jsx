@@ -49,7 +49,7 @@ const SneakerDetail = () => {
         if (hasFetchedRef.current) {
           return;
         }
-        
+
         hasFetchedRef.current = true;
 
         const sneakerData = await getSneakerBySlug(slug, colorParam);

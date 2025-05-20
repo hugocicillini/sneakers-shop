@@ -20,123 +20,85 @@ const initialState = {
   appliedCoupon: null,
 };
 
-// Reducer simplificado para gerenciar o carrinho
+// Types para as ações do reducer (melhora a manutenção)
+const ACTION_TYPES = {
+  SET_CART: 'SET_CART',
+  ADD_ITEM_SUCCESS: 'ADD_ITEM_SUCCESS',
+  REMOVE_ITEM_SUCCESS: 'REMOVE_ITEM_SUCCESS',
+  UPDATE_QUANTITY_SUCCESS: 'UPDATE_QUANTITY_SUCCESS',
+  CLEAR_CART_SUCCESS: 'CLEAR_CART_SUCCESS',
+  TOGGLE_CART: 'TOGGLE_CART',
+  SET_CART_OPEN: 'SET_CART_OPEN',
+  SET_COUPON: 'SET_COUPON',
+  SET_LOADING: 'SET_LOADING',
+  SET_ERROR: 'SET_ERROR',
+};
+
+// Reducer refatorado para gerenciar o carrinho
 function cartReducer(state, action) {
   switch (action.type) {
-    case 'SET_CART':
-      return { ...state, items: action.payload, loading: false, error: null };
-
-    case 'ADD_ITEM_SUCCESS':
-      // Se recebemos o carrinho completo, usamos ele
-      if (action.payload.cart?.items) {
-        return { ...state, items: action.payload.cart.items, loading: false };
-      }
-      // Caso contrário, adicionamos apenas o novo item
+    case ACTION_TYPES.SET_CART:
       return {
         ...state,
-        items: [...state.items, action.payload.item],
+        items: action.payload,
+        loading: false,
+        error: null,
+      };
+
+    case ACTION_TYPES.ADD_ITEM_SUCCESS:
+      // Agora sempre esperamos o carrinho completo da API
+      return {
+        ...state,
+        items: action.payload.items || state.items,
         loading: false,
       };
 
-    case 'REMOVE_ITEM_SUCCESS':
-      // Se recebemos o carrinho atualizado, usamos ele
-      if (action.payload?.items) {
-        return { ...state, items: action.payload.items, loading: false };
-      }
-      // Caso contrário, removemos o item pelo ID
+    case ACTION_TYPES.REMOVE_ITEM_SUCCESS:
       return {
         ...state,
-        items: state.items.filter((item) => item.cartItemId !== action.payload),
+        items:
+          action.payload.items ||
+          state.items.filter(
+            (item) => item.cartItemId !== action.payload.cartItemId
+          ),
         loading: false,
       };
 
-    case 'UPDATE_QUANTITY_SUCCESS':
-      // Se recebemos o carrinho atualizado, usamos ele
-      if (action.payload?.items) {
-        return { ...state, items: action.payload.items, loading: false };
-      }
-      // Caso contrário, atualizamos o item específico
+    case ACTION_TYPES.UPDATE_QUANTITY_SUCCESS:
       return {
         ...state,
-        items: state.items.map((item) =>
-          item.cartItemId === action.payload.cartItemId
-            ? { ...item, quantity: action.payload.quantity }
-            : item
-        ),
+        items:
+          action.payload.items ||
+          state.items.map((item) =>
+            item.cartItemId === action.payload.cartItemId
+              ? { ...item, quantity: action.payload.quantity }
+              : item
+          ),
         loading: false,
       };
 
-    case 'CLEAR_CART_SUCCESS':
+    case ACTION_TYPES.CLEAR_CART_SUCCESS:
       return { ...state, items: [], loading: false };
 
-    case 'TOGGLE_CART':
+    case ACTION_TYPES.TOGGLE_CART:
       return { ...state, isOpen: !state.isOpen };
 
-    case 'SET_CART_OPEN':
+    case ACTION_TYPES.SET_CART_OPEN:
       return { ...state, isOpen: action.payload };
 
-    // No reducer, modifique o case 'SET_COUPON':
-    case 'SET_COUPON':
-      // Se estamos aplicando um cupom
+    case ACTION_TYPES.SET_COUPON:
       if (action.payload) {
-        const couponData = action.payload;
-        const discount = couponData.discountValue;
-        const discountType = couponData.discountType;
-
-        // Guardar os preços originais e aplicar o desconto em cada item
-        const updatedItems = state.items.map((item) => {
-          // Guardar o preço original se ainda não existir
-          const originalPrice = item.originalPrice || item.price;
-          let discountedPrice = originalPrice;
-
-          // Calcular o preço com desconto
-          if (discountType === 'percentage') {
-            discountedPrice = originalPrice - originalPrice * (discount / 100);
-          } else if (discountType === 'fixed_amount') {
-            // Para desconto de valor fixo, distribuímos proporcionalmente entre os itens
-            const totalItems = state.items.reduce(
-              (sum, i) => sum + i.quantity,
-              0
-            );
-            const itemDiscount = discount / totalItems;
-            discountedPrice = Math.max(0, originalPrice - itemDiscount);
-          }
-
-          return {
-            ...item,
-            originalPrice, // Guardar o preço original
-            price: discountedPrice, // Atualizar para o preço com desconto
-            hasDiscount: true,
-          };
-        });
-
-        return {
-          ...state,
-          appliedCoupon: action.payload,
-          items: updatedItems,
-        };
-      }
-      // Se estamos removendo um cupom
-      else {
-        // Restaurar os preços originais
-        const restoredItems = state.items.map((item) => ({
-          ...item,
-          price: item.originalPrice || item.price, // Restaurar o preço original
-          hasDiscount: false,
-          originalPrice: undefined, // Opcional: remover propriedade de preço original
-        }));
-
-        return {
-          ...state,
-          appliedCoupon: null,
-          items: restoredItems,
-        };
+        // Aplicando cupom - extraído para função auxiliar
+        return applyCouponToState(state, action.payload);
+      } else {
+        // Removendo cupom - extraído para função auxiliar
+        return removeCouponFromState(state);
       }
 
-    case 'SET_LOADING':
+    case ACTION_TYPES.SET_LOADING:
       return { ...state, loading: action.payload };
 
-    case 'SET_ERROR':
+    case ACTION_TYPES.SET_ERROR:
       return { ...state, error: action.payload, loading: false };
 
     default:
@@ -144,160 +106,237 @@ function cartReducer(state, action) {
   }
 }
 
-// Provider do contexto do carrinho
+// Funções auxiliares para o reducer - melhora legibilidade
+function applyCouponToState(state, couponData) {
+  const { discountValue, discountType } = couponData;
+  let totalDiscount = 0;
+
+  const updatedItems = state.items.map((item) => {
+    // Guardar o preço original se ainda não existir
+    const originalPrice = item.originalPrice || item.price;
+    let discountedPrice = originalPrice;
+
+    // Calcular o preço com desconto
+    if (discountType === 'percentage') {
+      const itemDiscount = originalPrice * (discountValue / 100);
+      discountedPrice = originalPrice - itemDiscount;
+      // Acumular o desconto total considerando a quantidade
+      totalDiscount += itemDiscount * item.quantity;
+    } else if (discountType === 'fixed_amount') {
+      const totalItems = state.items.reduce((sum, i) => sum + i.quantity, 0);
+      const itemDiscount = discountValue / totalItems;
+      discountedPrice = Math.max(0, originalPrice - itemDiscount);
+      // Para descontos de valor fixo, usamos o valor diretamente
+      totalDiscount = discountValue;
+    }
+
+    return {
+      ...item,
+      originalPrice,
+      price: discountedPrice,
+      hasDiscount: true,
+    };
+  });
+
+  // Atualizar o valor do desconto no objeto do cupom
+  const updatedCoupon = {
+    ...couponData,
+    discountAmount: parseFloat(totalDiscount.toFixed(2)),
+  };
+
+  return {
+    ...state,
+    appliedCoupon: updatedCoupon,
+    items: updatedItems,
+  };
+}
+
+function removeCouponFromState(state) {
+  const restoredItems = state.items.map((item) => ({
+    ...item,
+    price: item.originalPrice || item.price,
+    hasDiscount: false,
+    originalPrice: undefined,
+  }));
+
+  return {
+    ...state,
+    appliedCoupon: null,
+    items: restoredItems,
+  };
+}
+
+// Provider do contexto do carrinho - refatorado
 export function CartProvider({ children }) {
   const [state, dispatch] = useReducer(cartReducer, initialState);
   const { isAuthenticated, user } = useAuth();
-  const hasLoadedCart = useRef(false); // Para evitar recarregar o carrinho se já foi carregado
+  const hasLoadedCart = useRef(false);
 
-  // Carregar o carrinho - agora depende também do estado de autenticação para recarregar
-  // quando o usuário fizer login
+  // Função auxiliar para tratamento de erros - evita repetição
+  const handleError = (error, customMessage = 'Ocorreu um erro') => {
+    console.error(customMessage, error);
+    dispatch({ type: ACTION_TYPES.SET_ERROR, payload: error.message });
+    toast({
+      title: 'Erro',
+      description: error.message || customMessage,
+      variant: 'destructive',
+    });
+  };
+
+  // Carregar o carrinho
   useEffect(() => {
-    // Se o carrinho já foi carregado, não faça nada
     if (!isAuthenticated || hasLoadedCart.current) return;
 
+    // Restaurar cupom salvo
     const savedCoupon = localStorage.getItem('appliedCoupon');
     if (savedCoupon) {
       try {
-        dispatch({ type: 'SET_COUPON', payload: JSON.parse(savedCoupon) });
+        dispatch({
+          type: ACTION_TYPES.SET_COUPON,
+          payload: JSON.parse(savedCoupon),
+        });
       } catch (e) {
         localStorage.removeItem('appliedCoupon');
       }
     }
 
     const loadCart = async () => {
-      dispatch({ type: 'SET_LOADING', payload: true });
+      dispatch({ type: ACTION_TYPES.SET_LOADING, payload: true });
 
       try {
         const cartData = await cartService.getCart();
-        dispatch({ type: 'SET_CART', payload: cartData.items || [] });
+        dispatch({
+          type: ACTION_TYPES.SET_CART,
+          payload: cartData.items || [],
+        });
       } catch (error) {
-        console.error('Erro ao carregar carrinho:', error);
-        dispatch({ type: 'SET_ERROR', payload: error.message });
+        handleError(error, 'Erro ao carregar carrinho');
       }
     };
 
-    // Sempre carrega o carrinho, seja do localStorage ou do servidor
     loadCart();
-    hasLoadedCart.current = true; // Marca que o carrinho foi carregado
-  }, [isAuthenticated]); // Agora depende de isAuthenticated para recarregar quando o status mudar
+    hasLoadedCart.current = true;
+  }, [isAuthenticated]);
 
-  // Monitorar quando usuário faz logout e resetar carrinho
+  // Lidar com logout - limpar carrinho
   useEffect(() => {
     if (user === null) {
-      // Usuário fez logout, resetar o carrinho imediatamente
-      dispatch({ type: 'CLEAR_CART_SUCCESS' });
+      dispatch({ type: ACTION_TYPES.CLEAR_CART_SUCCESS });
+      localStorage.removeItem('appliedCoupon');
     }
   }, [user]);
 
-  // Sincronizar o carrinho quando o usuário fizer login
+  // Sincronizar carrinho local com servidor após login
   useEffect(() => {
-    // Só sincronizar se estiver logado
     if (!isAuthenticated || !user) return;
 
     const syncCartWithServer = async () => {
-      try {
-        dispatch({ type: 'SET_LOADING', payload: true });
+      dispatch({ type: ACTION_TYPES.SET_LOADING, payload: true });
 
-        // Buscar os itens do localStorage diretamente
+      try {
         const localCart = JSON.parse(
           localStorage.getItem('cart') || '{"items":[]}'
         );
 
-        if (!localCart.items || localCart.items.length === 0) {
-          dispatch({ type: 'SET_LOADING', payload: false });
+        if (!localCart.items?.length) {
+          dispatch({ type: ACTION_TYPES.SET_LOADING, payload: false });
           return;
         }
 
-        // Função auxiliar para verificar se uma string é um ObjectId válido do MongoDB
-        const isValidObjectId = (id) => id && /^[0-9a-fA-F]{24}$/.test(id);
+        await syncLocalItemsToServer(localCart.items);
 
-        // Adicionar itens um a um (abordagem mais confiável)
-        let successCount = 0;
+        // Limpar o localStorage
+        localStorage.removeItem('cart');
 
-        for (const item of localCart.items) {
-          try {
-            // Garantir que o preço seja válido (prevenção de preços zerados)
-            const price =
-              parseFloat(item.price) || parseFloat(item.originalPrice) || 799.9;
-
-            // Preparar o item sem variantId para evitar o erro de Cast to ObjectId
-            const cleanItem = {
-              sneakerId: item.sneakerId,
-              size: item.size,
-              color: item.color,
-              quantity: item.quantity || 1,
-              name: item.name,
-              price: price, // Usar o preço garantidamente não-zero
-              image: item.image || 'https://via.placeholder.com/150',
-              brand:
-                typeof item.brand === 'object' ? item.brand.name : item.brand,
-              slug: item.slug,
-            };
-
-            // Adicionar variantId apenas se for um ObjectId válido
-            if (isValidObjectId(item.sizeId)) {
-              cleanItem.variantId = item.sizeId;
-            } else if (isValidObjectId(item.variantId)) {
-              cleanItem.variantId = item.variantId;
-            }
-
-            const addResult = await cartService.addToCart(cleanItem);
-
-            if (addResult.success) {
-              successCount++;
-            } else {
-              console.warn(
-                `Falha ao adicionar: ${addResult.error || 'Erro desconhecido'}`
-              );
-            }
-          } catch (itemError) {
-            console.error(
-              `Erro ao processar item ${item.name || 'desconhecido'}:`,
-              itemError
-            );
-          }
-        }
-
-        // Se pelo menos um item foi adicionado com sucesso
-        if (successCount > 0) {
-          // Limpar o localStorage
-          localStorage.removeItem('cart');
-
-          // Buscar o carrinho atualizado
-          const updatedCart = await cartService.getCart();
-          dispatch({ type: 'SET_CART', payload: updatedCart.items || [] });
-
-          toast({
-            title: 'Carrinho sincronizado',
-            description: `${successCount} de ${localCart.items.length} itens foram transferidos para sua conta`,
-            variant: 'default',
-          });
-        } else {
-          toast({
-            title: 'Falha na sincronização',
-            description:
-              'Não foi possível transferir seus itens para o servidor',
-            variant: 'destructive',
-          });
-        }
-
-        dispatch({ type: 'SET_LOADING', payload: false });
-      } catch (error) {
-        console.error('Erro na sincronização do carrinho:', error);
-        toast({
-          title: 'Erro na sincronização',
-          description: 'Ocorreu um problema técnico',
-          variant: 'destructive',
+        // Buscar o carrinho atualizado
+        const updatedCart = await cartService.getCart();
+        dispatch({
+          type: ACTION_TYPES.SET_CART,
+          payload: updatedCart.items || [],
         });
-        dispatch({ type: 'SET_LOADING', payload: false });
+      } catch (error) {
+        handleError(error, 'Erro na sincronização do carrinho');
+      } finally {
+        dispatch({ type: ACTION_TYPES.SET_LOADING, payload: false });
       }
     };
 
     syncCartWithServer();
   }, [isAuthenticated, user]);
 
-  // Adicionar item ao carrinho
+  // Função para sincronizar itens locais - maior organização
+  async function syncLocalItemsToServer(localItems) {
+    let successCount = 0;
+
+    for (const item of localItems) {
+      try {
+        const cleanItem = prepareItemForSync(item);
+        const addResult = await cartService.addToCart(cleanItem);
+
+        if (addResult.success) {
+          successCount++;
+        } else {
+          console.warn(
+            `Falha ao adicionar: ${addResult.error || 'Erro desconhecido'}`
+          );
+        }
+      } catch (itemError) {
+        console.error(
+          `Erro ao processar item ${item.name || 'desconhecido'}:`,
+          itemError
+        );
+      }
+    }
+
+    // Notificar o resultado da sincronização
+    if (successCount > 0) {
+      toast({
+        title: 'Carrinho sincronizado',
+        description: `${successCount} de ${localItems.length} itens foram transferidos para sua conta`,
+        variant: 'default',
+      });
+    } else {
+      toast({
+        title: 'Falha na sincronização',
+        description: 'Não foi possível transferir seus itens para o servidor',
+        variant: 'destructive',
+      });
+    }
+
+    return successCount;
+  }
+
+  // Prepara um item local para sincronização
+  function prepareItemForSync(item) {
+    // Verifica se um ID é um ObjectId válido do MongoDB
+    const isValidObjectId = (id) => id && /^[0-9a-fA-F]{24}$/.test(id);
+
+    const price =
+      parseFloat(item.price) || parseFloat(item.originalPrice) || 799.9;
+
+    const cleanItem = {
+      sneakerId: item.sneakerId,
+      size: item.size,
+      color: item.color,
+      quantity: item.quantity || 1,
+      name: item.name,
+      price: price,
+      image: item.image || 'https://via.placeholder.com/150',
+      brand: typeof item.brand === 'object' ? item.brand.name : item.brand,
+      slug: item.slug,
+    };
+
+    // Adicionar variantId apenas se for válido
+    if (isValidObjectId(item.sizeId)) {
+      cleanItem.variantId = item.sizeId;
+    } else if (isValidObjectId(item.variantId)) {
+      cleanItem.variantId = item.variantId;
+    }
+
+    return cleanItem;
+  }
+
+  // Função addItem otimizada e limpa (sem logs de depuração)
   const addItem = async (item) => {
     if (!item || !item.sneakerId) {
       toast({
@@ -308,72 +347,162 @@ export function CartProvider({ children }) {
       return;
     }
 
-    dispatch({ type: 'SET_LOADING', payload: true });
+    dispatch({ type: ACTION_TYPES.SET_LOADING, payload: true });
 
     try {
-      // Garantir que o preço seja válido (prevenção de preços zerados)
-      const itemWithValidPrice = {
-        ...item,
-        price:
-          parseFloat(item.price) || parseFloat(item.originalPrice) || 799.9,
-      };
+      // Buscar o carrinho atualizado do servidor
+      const currentCart = await cartService.getCart();
+      const currentItems = currentCart.items || [];
 
-      const result = await cartService.addToCart(itemWithValidPrice);
+      // Normalizar valores para comparação segura
+      const sneakerId = String(item.sneakerId);
+      const size = String(item.size);
+      const color = String(item.color || '').toLowerCase();
 
-      if (result.success) {
-        // Atualizar o carrinho
-        dispatch({
-          type: 'ADD_ITEM_SUCCESS',
-          payload: result.cart ? result : { item: itemWithValidPrice },
-        });
+      // Verificação de duplicatas
+      const existingItem = currentItems.find(
+        (cartItem) =>
+          String(cartItem.sneakerId) === sneakerId &&
+          String(cartItem.size) === size &&
+          String(cartItem.color || '').toLowerCase() === color
+      );
 
-        // Notificar o usuário
-        toast({
-          title: 'Produto adicionado',
-          description: `${item.name || 'Produto'} foi adicionado ao carrinho`,
-          variant: 'success',
-        });
+      // Se encontrou item existente com ID, atualiza a quantidade
+      if (existingItem && existingItem.cartItemId) {
+        const newQuantity = existingItem.quantity + (item.quantity || 1);
+
+        const updateResult = await cartService.updateCartItemQuantity(
+          existingItem.cartItemId,
+          newQuantity
+        );
+
+        if (updateResult.success) {
+          // Buscar o carrinho atualizado após a modificação
+          const updatedCart = await cartService.getCart();
+
+          dispatch({
+            type: ACTION_TYPES.SET_CART,
+            payload: updatedCart.items || [],
+          });
+
+          toast({
+            title: 'Quantidade atualizada',
+            description: `Quantidade de ${
+              item.name || 'produto'
+            } atualizada no carrinho`,
+            variant: 'success',
+          });
+
+          // Recalcular descontos se houver cupom aplicado
+          if (state.appliedCoupon) {
+            dispatch({
+              type: ACTION_TYPES.SET_COUPON,
+              payload: state.appliedCoupon,
+            });
+          }
+        } else {
+          throw new Error(updateResult.error || 'Erro ao atualizar quantidade');
+        }
       } else {
-        throw new Error(result.error || 'Erro ao adicionar produto');
+        // Se item não existe ou não tem ID, adiciona como novo
+        const itemToAdd = {
+          ...item,
+          price:
+            parseFloat(item.price) || parseFloat(item.originalPrice) || 799.9,
+        };
+
+        // Se encontrou um item duplicado sem ID, ajustar a quantidade
+        if (existingItem) {
+          itemToAdd.quantity = existingItem.quantity + (item.quantity || 1);
+
+          // Remover o item antigo sem ID, se possível
+          try {
+            if (existingItem._id) {
+              await cartService.removeFromCart(existingItem._id);
+            }
+          } catch (removeError) {
+            // Prosseguir mesmo se não conseguir remover o item antigo
+          }
+        }
+
+        const result = await cartService.addToCart(itemToAdd);
+
+        if (result.success) {
+          // Buscar o carrinho atualizado após a adição
+          const finalCart = await cartService.getCart();
+
+          dispatch({
+            type: ACTION_TYPES.SET_CART,
+            payload: finalCart.items || [],
+          });
+
+          toast({
+            title: 'Produto adicionado',
+            description: `${item.name || 'Produto'} foi adicionado ao carrinho`,
+            variant: 'success',
+          });
+
+          // Recalcular descontos se houver cupom aplicado
+          if (state.appliedCoupon) {
+            dispatch({
+              type: ACTION_TYPES.SET_COUPON,
+              payload: state.appliedCoupon,
+            });
+          }
+        } else {
+          throw new Error(result.error || 'Erro ao adicionar produto');
+        }
       }
     } catch (error) {
-      dispatch({ type: 'SET_ERROR', payload: error.message });
-      toast({
-        title: 'Erro',
-        description: error.message,
-        variant: 'destructive',
-      });
+      handleError(error, 'Erro ao adicionar produto ao carrinho');
+    } finally {
+      dispatch({ type: ACTION_TYPES.SET_LOADING, payload: false });
     }
   };
 
-  // Remover item do carrinho
+  // Remover item do carrinho - refatorado
   const removeItem = async (cartItemId) => {
-    dispatch({ type: 'SET_LOADING', payload: true });
+    dispatch({ type: ACTION_TYPES.SET_LOADING, payload: true });
 
     try {
       const result = await cartService.removeFromCart(cartItemId);
 
       if (result.success) {
-        dispatch({ type: 'REMOVE_ITEM_SUCCESS', payload: result.cart });
-        toast({ title: 'Item removido do carrinho' });
+        dispatch({
+          type: ACTION_TYPES.REMOVE_ITEM_SUCCESS,
+          payload: {
+            cartItemId,
+            ...(result.cart || {}),
+          },
+        });
+
+        toast({
+          title: 'Item removido',
+          description: 'Item removido do carrinho com sucesso',
+        });
+
+        // Recalcular descontos se houver cupom aplicado
+        if (state.appliedCoupon) {
+          dispatch({
+            type: ACTION_TYPES.SET_COUPON,
+            payload: state.appliedCoupon,
+          });
+        }
       } else {
         throw new Error(result.error || 'Erro ao remover item');
       }
     } catch (error) {
-      dispatch({ type: 'SET_ERROR', payload: error.message });
-      toast({
-        title: 'Erro',
-        description: error.message,
-        variant: 'destructive',
-      });
+      handleError(error, 'Erro ao remover item do carrinho');
+    } finally {
+      dispatch({ type: ACTION_TYPES.SET_LOADING, payload: false });
     }
   };
 
-  // Atualizar quantidade de um item
+  // Atualizar quantidade - refatorado
   const updateQuantity = async (cartItemId, quantity) => {
     if (quantity < 1) return;
 
-    dispatch({ type: 'SET_LOADING', payload: true });
+    dispatch({ type: ACTION_TYPES.SET_LOADING, payload: true });
 
     try {
       const result = await cartService.updateCartItemQuantity(
@@ -382,37 +511,45 @@ export function CartProvider({ children }) {
       );
 
       if (result.success) {
-        dispatch({ type: 'UPDATE_QUANTITY_SUCCESS', payload: result.cart });
+        dispatch({
+          type: ACTION_TYPES.UPDATE_QUANTITY_SUCCESS,
+          payload: {
+            cartItemId,
+            quantity,
+            ...(result.cart || {}),
+          },
+        });
 
+        // Recalcular descontos se houver cupom aplicado
         if (state.appliedCoupon) {
-          // Pequeno timeout para garantir que a atualização da quantidade seja processada primeiro
-          setTimeout(() => {
-            // Reaplicar o mesmo cupom para recalcular os descontos
-            dispatch({ type: 'SET_COUPON', payload: state.appliedCoupon });
-          }, 10);
+          dispatch({
+            type: ACTION_TYPES.SET_COUPON,
+            payload: state.appliedCoupon,
+          });
         }
       } else {
         throw new Error(result.error || 'Erro ao atualizar quantidade');
       }
     } catch (error) {
-      dispatch({ type: 'SET_ERROR', payload: error.message });
-      toast({
-        title: 'Erro',
-        description: error.message,
-        variant: 'destructive',
-      });
+      handleError(error, 'Erro ao atualizar quantidade');
+    } finally {
+      dispatch({ type: ACTION_TYPES.SET_LOADING, payload: false });
     }
   };
 
-  // Limpar o carrinho
+  // Limpar o carrinho - refatorado
   const clearCart = async () => {
-    dispatch({ type: 'SET_LOADING', payload: true });
+    dispatch({ type: ACTION_TYPES.SET_LOADING, payload: true });
 
     try {
       const result = await cartService.clearCart();
 
       if (result.success) {
-        dispatch({ type: 'CLEAR_CART_SUCCESS' });
+        dispatch({ type: ACTION_TYPES.CLEAR_CART_SUCCESS });
+
+        // Também removemos qualquer cupom aplicado
+        localStorage.removeItem('appliedCoupon');
+
         toast({
           title: 'Carrinho esvaziado',
           description: 'Todos os produtos foram removidos',
@@ -421,37 +558,48 @@ export function CartProvider({ children }) {
         throw new Error(result.error || 'Erro ao esvaziar carrinho');
       }
     } catch (error) {
-      dispatch({ type: 'SET_ERROR', payload: error.message });
-      toast({
-        title: 'Erro',
-        description: error.message,
-        variant: 'destructive',
-      });
+      handleError(error, 'Erro ao limpar o carrinho');
+    } finally {
+      dispatch({ type: ACTION_TYPES.SET_LOADING, payload: false });
     }
   };
 
-  // Função para resetar o carrinho sem fazer requisição ao servidor
+  // Função para resetar o carrinho localmente
   const resetCart = () => {
-    dispatch({ type: 'CLEAR_CART_SUCCESS' });
+    dispatch({ type: ACTION_TYPES.CLEAR_CART_SUCCESS });
+    localStorage.removeItem('appliedCoupon');
   };
 
+  // Aplicar cupom - refatorado
   const applyCoupon = (couponData) => {
-    dispatch({ type: 'SET_COUPON', payload: couponData });
-
-    // Opcional: salvar no localStorage para persistir entre recarregamentos
     if (couponData) {
-      localStorage.setItem('appliedCoupon', JSON.stringify(couponData));
+      // Se estamos aplicando um cupom novo, garantimos que ele tenha
+      // os dados básicos mesmo se não for calculado imediatamente
+      const preparedCoupon = {
+        ...couponData,
+        discountAmount: couponData.discountAmount || 0,
+      };
+
+      dispatch({ type: ACTION_TYPES.SET_COUPON, payload: preparedCoupon });
+      localStorage.setItem('appliedCoupon', JSON.stringify(preparedCoupon));
+
+      toast({
+        title: 'Cupom aplicado',
+        description: `Cupom ${preparedCoupon.code} aplicado com sucesso`,
+        variant: 'success',
+      });
     } else {
+      dispatch({ type: ACTION_TYPES.SET_COUPON, payload: null });
       localStorage.removeItem('appliedCoupon');
     }
   };
 
-  // Funções para controlar a visibilidade do carrinho
-  const toggleCart = () => dispatch({ type: 'TOGGLE_CART' });
+  // Funções para controlar visibilidade do carrinho
+  const toggleCart = () => dispatch({ type: ACTION_TYPES.TOGGLE_CART });
   const setCartOpen = (isOpen) =>
-    dispatch({ type: 'SET_CART_OPEN', payload: isOpen });
+    dispatch({ type: ACTION_TYPES.SET_CART_OPEN, payload: isOpen });
 
-  // Calcular valores totais - melhor tratamento de erros com valores não numéricos
+  // Cálculos de valores totais - refatorados para maior segurança
   const cartCount = state.items.reduce((total, item) => {
     const quantity = parseInt(item?.quantity) || 0;
     return total + (quantity > 0 ? quantity : 0);
@@ -466,12 +614,16 @@ export function CartProvider({ children }) {
     }, 0)
     .toFixed(2);
 
-  const pixDiscount = parseFloat(subtotal) * 0.05;
+  const pixDiscount = parseFloat((parseFloat(subtotal) * 0.05).toFixed(2));
+
   const couponDiscount = state.appliedCoupon
-    ? state.appliedCoupon.discountAmount
+    ? parseFloat(state.appliedCoupon.discountAmount || 0)
     : 0;
-  const totalWithDiscounts =
-    parseFloat(subtotal) - pixDiscount - couponDiscount;
+
+  const totalWithDiscounts = Math.max(
+    0,
+    parseFloat((parseFloat(subtotal) - pixDiscount - couponDiscount).toFixed(2))
+  );
 
   // Valores e funções disponíveis no contexto
   const value = {
@@ -481,10 +633,10 @@ export function CartProvider({ children }) {
     error: state.error,
     cartCount,
     subtotal,
-    addItem,
     pixDiscount,
     couponDiscount,
     totalWithDiscounts,
+    addItem,
     removeItem,
     updateQuantity,
     clearCart,

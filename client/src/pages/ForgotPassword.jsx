@@ -5,42 +5,45 @@ import { Label } from '@/components/ui/label';
 import { useAuth } from '@/contexts/AuthContext';
 import LayoutBase from '@/layout/LayoutBase';
 import { useState } from 'react';
-import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 
-const Login = () => {
+const ForgotPassword = () => {
   const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+  const [successMessage, setSuccessMessage] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const { login } = useAuth();
+  const { requestPasswordReset } = useAuth();
   const navigate = useNavigate();
-  const location = useLocation();
-
-  // Versão corrigida para garantir que o caminho comece com barra
-  const searchParams = new URLSearchParams(location.search);
-  const redirectUrl = searchParams.get('redirect');
-
-  // Garantir que o caminho comece com barra (/) para ser absoluto
-  let from = location.state?.from?.pathname || '/';
-  if (redirectUrl) {
-    from = redirectUrl.startsWith('/') ? redirectUrl : `/${redirectUrl}`;
-  }
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
+    setSuccessMessage('');
     setIsSubmitting(true);
 
     try {
-      const result = await login(email, password);
+      // Considerando que requestPasswordReset é uma função do contexto Auth
+      // Se ela não existir, você precisará implementá-la no AuthContext
+      const result = await requestPasswordReset(email);
+
       if (result.success) {
-        navigate(from, { replace: true });
+        setSuccessMessage('Enviamos um link de recuperação para seu email.');
+        // Limpar o campo de email após o sucesso
+        setEmail('');
+        // Opcionalmente, redirecione após alguns segundos
+        setTimeout(() => {
+          navigate('/login');
+        }, 5000);
       } else {
-        setError(result.message);
+        setError(
+          result.message || 'Não foi possível enviar o email de recuperação.'
+        );
       }
     } catch (err) {
-      setError('Ocorreu um erro durante o login. Tente novamente.');
+      setError(
+        'Ocorreu um erro ao processar sua solicitação. Tente novamente.'
+      );
       console.error(err);
     } finally {
       setIsSubmitting(false);
@@ -51,11 +54,19 @@ const Login = () => {
     <LayoutBase>
       <div className="min-h-[calc(100vh-250px)] flex items-center justify-center p-4">
         <div className="w-full max-w-lg bg-white p-8 rounded-lg shadow-md border border-gray-200">
-          <h1 className="text-2xl font-bold mb-6 text-center">Login</h1>
+          <h1 className="text-2xl font-bold mb-6 text-center">
+            Recuperar Senha
+          </h1>
 
           {error && (
             <Alert variant="destructive" className="mb-4">
               <AlertDescription>{error}</AlertDescription>
+            </Alert>
+          )}
+
+          {successMessage && (
+            <Alert className="mb-4 bg-green-50 text-green-800 border-green-200">
+              <AlertDescription>{successMessage}</AlertDescription>
             </Alert>
           )}
 
@@ -72,24 +83,9 @@ const Login = () => {
               />
             </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="password">Senha</Label>
-              <Input
-                id="password"
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="Sua senha"
-                required
-              />
-              <div className="text-right">
-                <Link
-                  to="/forgot-password"
-                  className="text-sm text-blue-600 hover:underline"
-                >
-                  Esqueceu sua senha?
-                </Link>
-              </div>
+            <div className="text-sm text-gray-600 mb-2">
+              Informe o email associado à sua conta. Enviaremos um link para
+              redefinir sua senha.
             </div>
 
             <Button
@@ -97,24 +93,20 @@ const Login = () => {
               className="w-full bg-black hover:bg-gray-800 text-white"
               disabled={isSubmitting}
             >
-              {isSubmitting ? 'Entrando...' : 'Entrar'}
+              {isSubmitting ? 'Enviando...' : 'Enviar Email de Recuperação'}
             </Button>
           </form>
 
           <div className="mt-6 text-center">
-            <p className="text-sm text-gray-600">
-              Não tem uma conta?{' '}
+            <div className="text-sm text-gray-600">
+              Lembrou sua senha?{' '}
               <Link
-                to={
-                  from === '/checkout/identification'
-                    ? '/register?redirect=/checkout/identification'
-                    : '/register'
-                }
+                to="/login"
                 className="text-blue-600 hover:underline font-semibold"
               >
-                Registre-se
+                Voltar para o login
               </Link>
-            </p>
+            </div>
           </div>
         </div>
       </div>
@@ -122,4 +114,4 @@ const Login = () => {
   );
 };
 
-export default Login;
+export default ForgotPassword;

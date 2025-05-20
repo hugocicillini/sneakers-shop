@@ -6,9 +6,19 @@ import { Separator } from '@/components/ui/separator';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useAuth } from '@/contexts/AuthContext';
 import { useCart } from '@/contexts/CartContext';
+import { useToast } from '@/hooks/use-toast';
 import LayoutCheckout from '@/layout/LayoutCheckout';
 import { motion } from 'framer-motion';
-import { ArrowLeft, Check, CreditCard, QrCode, Receipt } from 'lucide-react';
+import {
+  ArrowLeft,
+  Check,
+  CreditCard,
+  Lock,
+  MapPin,
+  QrCode,
+  Receipt,
+  ShieldCheck,
+} from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
@@ -20,16 +30,23 @@ const FormatCurrency = ({ value }) => {
   }).format(value);
 };
 
-// Hook para gerenciar métodos de pagamento
-const usePaymentMethods = () => {
+const Payment = () => {
+  const navigate = useNavigate();
+  const { toast } = useToast();
+  const { user, isAuthenticated } = useAuth();
+  const { items, subtotal, clearCart } = useCart();
   const [selectedMethod, setSelectedMethod] = useState('credit_card');
+  const [loading, setLoading] = useState(false);
+  const [shippingInfo, setShippingInfo] = useState(null);
+  const [loadingCart, setLoadingCart] = useState(true);
 
+  // Métodos de pagamento
   const paymentMethods = [
     {
       id: 'credit_card',
       name: 'Cartão de Crédito',
       icon: <CreditCard size={18} />,
-      description: 'Pague em até 12x',
+      description: 'Até 12x sem juros',
     },
     {
       id: 'pix',
@@ -41,123 +58,91 @@ const usePaymentMethods = () => {
       id: 'boleto',
       name: 'Boleto',
       icon: <Receipt size={18} />,
-      description: 'Prazo de 3 dias úteis',
+      description: 'Compensação em até 3 dias',
     },
   ];
 
-  return {
-    selectedMethod,
-    setSelectedMethod,
-    paymentMethods,
-  };
-};
-
-// Componente principal
-const Payment = () => {
-  const navigate = useNavigate();
-  const { user, isAuthenticated } = useAuth();
-  const { items, subtotal, clearCart } = useCart();
-  const { selectedMethod, setSelectedMethod, paymentMethods } =
-    usePaymentMethods();
-  const [loading, setLoading] = useState(false);
-  const [shippingInfo, setShippingInfo] = useState(null);
-  const [orderId, setOrderId] = useState(null);
-  const [loadingCart, setLoadingCart] = useState(true);
-  const [pixData, setPixData] = useState(null);
-  const [boletoData, setBoletoData] = useState(null);
-  const [paymentComplete, setPaymentComplete] = useState(false);
-
-  // Verificar se o usuário está autenticado e tem itens no carrinho
+  // Verificar autenticação e carregar dados
   useEffect(() => {
     if (!isAuthenticated) {
-      // Só redirecionar para login se user for undefined (ainda não carregou)
       if (user === undefined) {
         navigate('/login?redirect=/checkout/payment');
       }
       return;
     }
 
-    // Recuperar informações de envio da sessão primeiro
+    // Recuperar informações de envio da sessão
     const storedShippingInfo = sessionStorage.getItem('shippingInfo');
     if (!storedShippingInfo) {
       navigate('/checkout/identification');
       return;
     }
 
-    setShippingInfo(JSON.parse(storedShippingInfo)); // Verificação do carrinho com delay para dar tempo de carregar
+    setShippingInfo(JSON.parse(storedShippingInfo));
+
+    // Verificação do carrinho com delay
     const checkCartTimer = setTimeout(() => {
       setLoadingCart(false);
-      // Só verificamos o carrinho depois de um tempo para garantir que foi carregado
-      // E apenas se não for uma sessão que já estava em andamento
-      const inProgressOrder = sessionStorage.getItem('orderInProgress');
-      if (items.length === 0 && !inProgressOrder) {
+      if (items.length === 0) {
         navigate('/checkout/cart');
-        return;
       }
     }, 1000);
+
     return () => clearTimeout(checkCartTimer);
-  }, [isAuthenticated, navigate, items]);
+  }, [isAuthenticated, navigate, items, user]);
 
-  // Verificar se temos um pedido em andamento salvo na sessão
-  useEffect(() => {
-    const inProgressOrder = sessionStorage.getItem('orderInProgress');
-    if (inProgressOrder) {
-      try {
-        const orderData = JSON.parse(inProgressOrder);
-        setOrderId(orderData.orderId);
-
-        // Se temos dados de PIX no sessionStorage, recuperar
-        if (orderData.pixData) {
-          setPixData(orderData.pixData);
-        }
-
-        // Se o pagamento foi marcado como completo
-        if (orderData.completed) {
-          setPaymentComplete(true);
-        }
-      } catch (error) {
-        console.error('Erro ao processar pedido em andamento:', error);
-      }
-    }
-  }, []);
-
-  // Salvar estado do método de pagamento selecionado no sessionStorage
-  useEffect(() => {
-    if (selectedMethod) {
-      sessionStorage.setItem('paymentMethod', selectedMethod);
-    }
-  }, [selectedMethod]);
-
-  // Recuperar método de pagamento salvo anteriormente
+  // Recuperar método de pagamento salvo
   useEffect(() => {
     const savedMethod = sessionStorage.getItem('paymentMethod');
     if (savedMethod) {
       setSelectedMethod(savedMethod);
     }
   }, []);
-  // Função para processar pagamento
+
+  // Salvar método selecionado
+  useEffect(() => {
+    if (selectedMethod) {
+      sessionStorage.setItem('paymentMethod', selectedMethod);
+    }
+  }, [selectedMethod]);
+
+  // Processar pagamento (simulação)
   const handlePaymentSubmit = async (paymentData) => {
-    console.log('handlePaymentSubmit chamado com:', paymentData);
+    setLoading(true);
+
+    try {
+      // Simulando processamento de pagamento
+      await new Promise((resolve) => setTimeout(resolve, 2000));
+
+      // Simulando resposta de sucesso
+      const orderId = 'ORDER' + Math.floor(Math.random() * 1000000);
+
+      toast({
+        title: 'Pedido realizado com sucesso!',
+        description: `Seu pedido #${orderId} foi confirmado.`,
+        variant: 'success',
+      });
+
+      // Limpar carrinho e redirecionar
+      clearCart();
+      navigate(`/checkout/confirmation/${orderId}`);
+    } catch (error) {
+      toast({
+        title: 'Erro no processamento',
+        description:
+          'Ocorreu um erro ao processar seu pagamento. Tente novamente.',
+        variant: 'destructive',
+      });
+    } finally {
+      setLoading(false);
+    }
   };
 
-  // Se o pagamento foi concluído, limpar carrinho e redirecionar
-  useEffect(() => {
-    if (paymentComplete && orderId) {
-      clearCart();
-      sessionStorage.removeItem('orderInProgress');
-      navigate(`/checkout/confirmation/${orderId}`);
-    }
-  }, [paymentComplete, orderId, navigate, clearCart]);
-
-  // Só renderizar null se o usuário não estiver autenticado e o user for diferente de undefined
-  // Se user for undefined, ainda está carregando o status de autenticação
-  if (!isAuthenticated && user !== undefined) return null;
-
-  // Mostra um estado de carregamento enquanto verificamos o carrinho ou os itens ainda não carregaram
+  // Tela de carregamento
   if (loadingCart || (!isAuthenticated && user === undefined) || !items) {
     return (
       <LayoutCheckout activeStep={3}>
-        <div className="flex justify-center items-center min-h-[50vh]">
+        <div className="flex justify-center items-center min-h-[60vh]">
           <div className="text-center">
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-black mx-auto mb-4"></div>
             <p className="text-gray-600">Carregando informações do pedido...</p>
@@ -166,110 +151,15 @@ const Payment = () => {
       </LayoutCheckout>
     );
   }
+
   if (!shippingInfo) return null;
+
   // Calcular valores
   const shipping = shippingInfo?.cost || 0;
   const subtotalValue = parseFloat(subtotal) || 0;
   const pixDiscount = selectedMethod === 'pix' ? subtotalValue * 0.05 : 0;
   const total =
     subtotalValue + shipping - (selectedMethod === 'pix' ? pixDiscount : 0);
-
-  // Componente com informações de entrega
-  const ShippingInfoCard = ({ shippingInfo }) => (
-    <div className="mt-4 bg-blue-50 p-4 rounded-lg">
-      <h3 className="font-medium text-blue-700 mb-2">Informações de entrega</h3>
-      {shippingInfo && shippingInfo.address && (
-        <div className="text-sm space-y-1">
-          <p className="font-medium">{shippingInfo.address.name}</p>
-          <p>
-            {shippingInfo.address.street}, {shippingInfo.address.number}
-          </p>
-          {shippingInfo.address.complement && (
-            <p>{shippingInfo.address.complement}</p>
-          )}
-          <p>
-            {shippingInfo.address.neighborhood} - {shippingInfo.address.city},{' '}
-            {shippingInfo.address.state}
-          </p>
-          <p>{shippingInfo.address.zipCode}</p>
-        </div>
-      )}
-      <Button
-        variant="link"
-        className="text-blue-700 p-0 h-auto mt-2"
-        onClick={() => navigate('/checkout/identification')}
-      >
-        Alterar endereço
-      </Button>
-    </div>
-  );
-
-  // Componente de resumo do pedido simplificado
-  const PaymentSummary = ({
-    items,
-    subtotal,
-    shipping,
-    pixDiscount,
-    selectedMethod,
-  }) => (
-    <div className="bg-white p-5 rounded-lg shadow-sm">
-      <div className="font-semibold mb-3">Resumo da compra</div>
-      <div className="flex flex-col gap-2 text-sm">
-        <div className="flex justify-between">
-          <span>
-            Valor dos produtos ({items.length}{' '}
-            {items.length === 1 ? 'item' : 'itens'})
-          </span>
-          <span>
-            <FormatCurrency value={subtotal} />
-          </span>
-        </div>
-
-        <div className="flex justify-between">
-          <span>Frete</span>
-          <span>
-            {shipping === 0 ? (
-              <span className="text-green-600 font-medium">Grátis</span>
-            ) : (
-              <FormatCurrency value={shipping} />
-            )}
-          </span>
-        </div>
-
-        {selectedMethod === 'pix' && (
-          <div className="flex justify-between text-green-600 text-sm">
-            <span className="flex items-center gap-1">
-              <Check size={14} />
-              Desconto Pix (5%)
-            </span>
-            <span>
-              - <FormatCurrency value={pixDiscount} />
-            </span>
-          </div>
-        )}
-
-        <Separator className="my-2" />
-
-        <div className="flex justify-between font-bold text-base">
-          <span>Total</span>
-          <span>
-            <FormatCurrency value={total} />
-          </span>
-        </div>
-      </div>
-
-      <div className="mt-4 text-xs text-gray-500 space-y-1">
-        <div className="flex items-center gap-1">
-          <Check size={12} className="text-green-500" />
-          <span>Compra segura</span>
-        </div>
-        <div className="flex items-center gap-1">
-          <Check size={12} className="text-green-500" />
-          <span>Site criptografado</span>
-        </div>
-      </div>
-    </div>
-  );
 
   return (
     <LayoutCheckout activeStep={3}>
@@ -283,30 +173,35 @@ const Payment = () => {
             variant="outline"
             size="icon"
             onClick={() => navigate('/checkout/identification')}
+            className="h-9 w-9"
           >
             <ArrowLeft size={16} />
           </Button>
-          <h1 className="text-xl font-bold">Forma de pagamento</h1>
+          <h1 className="text-xl font-bold">Finalizar Compra</h1>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+          {/* Coluna principal - Métodos de pagamento */}
           <div className="md:col-span-2">
-            <div className="bg-white rounded-lg shadow-sm overflow-hidden">
+            <div className="bg-white rounded-lg shadow-sm overflow-hidden border">
               <Tabs
                 defaultValue={selectedMethod}
                 onValueChange={setSelectedMethod}
                 className="w-full"
               >
+                {/* Cabeçalho das tabs */}
                 <TabsList className="grid grid-cols-3 h-auto bg-gray-50 p-0 border-b">
                   {paymentMethods.map((method) => (
                     <TabsTrigger
                       key={method.id}
                       value={method.id}
-                      className="flex flex-col items-center py-4 px-2 gap-1 data-[state=active]:bg-white rounded-none border-b-2 data-[state=active]:border-black data-[state=inactive]:border-transparent"
+                      className="flex flex-col items-center py-4 px-2 gap-1 data-[state=active]:bg-white rounded-none 
+                        border-b-2 data-[state=active]:border-black data-[state=inactive]:border-transparent 
+                        h-full transition-all"
                     >
                       <div className="flex items-center gap-2">
                         {method.icon}
-                        <span>{method.name}</span>
+                        <span className="font-medium">{method.name}</span>
                       </div>
                       <span className="text-xs text-gray-500">
                         {method.description}
@@ -315,6 +210,7 @@ const Payment = () => {
                   ))}
                 </TabsList>
 
+                {/* Conteúdo das tabs */}
                 <div className="p-6">
                   <TabsContent value="credit_card" className="mt-0">
                     <CreditCardForm
@@ -326,7 +222,8 @@ const Payment = () => {
                       }
                       loading={loading}
                     />
-                  </TabsContent>{' '}
+                  </TabsContent>
+
                   <TabsContent value="pix" className="mt-0">
                     <PixPaymentForm
                       onSubmit={() =>
@@ -337,6 +234,7 @@ const Payment = () => {
                       loading={loading}
                     />
                   </TabsContent>
+
                   <TabsContent value="boleto" className="mt-0">
                     <BoletoPaymentForm
                       onSubmit={() =>
@@ -348,18 +246,160 @@ const Payment = () => {
                 </div>
               </Tabs>
             </div>
+
+            {/* Selos de segurança */}
+            <div className="mt-6 flex justify-center items-center gap-6 py-4 px-6 bg-white rounded-lg border">
+              <div className="flex items-center gap-2">
+                <Lock size={20} className="text-gray-500" />
+                <span className="text-sm text-gray-600 font-medium">
+                  Pagamento Seguro
+                </span>
+              </div>
+              <Separator orientation="vertical" className="h-6" />
+              <div className="flex items-center gap-2">
+                <ShieldCheck size={20} className="text-gray-500" />
+                <span className="text-sm text-gray-600 font-medium">
+                  Ambiente Protegido
+                </span>
+              </div>
+            </div>
           </div>
 
-          <div className="md:col-span-1">
-            <PaymentSummary
-              items={items}
-              subtotal={subtotal}
-              shipping={shipping}
-              pixDiscount={pixDiscount}
-              selectedMethod={selectedMethod}
-            />
+          {/* Coluna lateral - Resumo */}
+          <div className="md:col-span-1 space-y-6">
+            {/* Resumo do pedido */}
+            <div className="bg-white p-5 rounded-lg shadow-sm border">
+              <h2 className="font-semibold text-lg mb-4">Resumo do Pedido</h2>
 
-            <ShippingInfoCard shippingInfo={shippingInfo} />
+              {/* Lista de produtos resumida */}
+              <div className="space-y-3 mb-4 max-h-[200px] overflow-y-auto">
+                {items.map((item) => (
+                  <div key={item.cartItemId} className="flex gap-3">
+                    <div className="w-16 h-16 bg-gray-100 rounded overflow-hidden border flex-shrink-0">
+                      <img
+                        src={item.image}
+                        alt={item.name}
+                        className="w-full h-full object-cover"
+                      />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium truncate">
+                        {item.name}
+                      </p>
+                      <p className="text-xs text-gray-500">
+                        Tam: {item.size} | Cor: {item.color || 'N/A'}
+                      </p>
+                      <div className="flex justify-between items-center mt-1">
+                        <p className="text-xs text-gray-500">
+                          Qtd: {item.quantity}
+                        </p>
+                        <p className="text-sm font-medium">
+                          <FormatCurrency value={item.price * item.quantity} />
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <Separator className="my-4" />
+
+              {/* Valores */}
+              <div className="space-y-2 text-sm">
+                <div className="flex justify-between">
+                  <span>
+                    Subtotal ({items.length}{' '}
+                    {items.length === 1 ? 'item' : 'itens'})
+                  </span>
+                  <span>
+                    <FormatCurrency value={subtotal} />
+                  </span>
+                </div>
+
+                <div className="flex justify-between">
+                  <span>Frete</span>
+                  <span>
+                    {shipping === 0 ? (
+                      <span className="text-green-600 font-medium">Grátis</span>
+                    ) : (
+                      <FormatCurrency value={shipping} />
+                    )}
+                  </span>
+                </div>
+
+                {selectedMethod === 'pix' && (
+                  <div className="flex justify-between text-green-600">
+                    <span>Desconto PIX (5%)</span>
+                    <span>
+                      - <FormatCurrency value={pixDiscount} />
+                    </span>
+                  </div>
+                )}
+              </div>
+
+              <Separator className="my-4" />
+
+              {/* Total */}
+              <div className="flex justify-between font-bold text-lg">
+                <span>Total</span>
+                <span>
+                  <FormatCurrency value={total} />
+                </span>
+              </div>
+            </div>
+
+            {/* Endereço de entrega */}
+            <div className="bg-white p-5 rounded-lg shadow-sm border">
+              <div className="flex items-center justify-between mb-3">
+                <h2 className="font-semibold flex items-center gap-2">
+                  <MapPin size={16} />
+                  <span>Endereço de Entrega</span>
+                </h2>
+                <Button
+                  variant="link"
+                  className="p-0 h-auto text-sm"
+                  onClick={() => navigate('/checkout/identification')}
+                >
+                  Editar
+                </Button>
+              </div>
+
+              {shippingInfo && shippingInfo.address && (
+                <div className="text-sm space-y-1 text-gray-600">
+                  <p className="font-medium text-gray-800">
+                    {shippingInfo.address.name}
+                  </p>
+                  <p>
+                    {shippingInfo.address.street}, {shippingInfo.address.number}
+                    {shippingInfo.address.complement &&
+                      ` - ${shippingInfo.address.complement}`}
+                  </p>
+                  <p>
+                    {shippingInfo.address.neighborhood} -{' '}
+                    {shippingInfo.address.city}, {shippingInfo.address.state}
+                  </p>
+                  <p>CEP: {shippingInfo.address.zipCode}</p>
+                </div>
+              )}
+            </div>
+
+            {/* Prazo de entrega */}
+            <div className="bg-green-50 p-4 rounded-lg border border-green-200">
+              <div className="flex items-start gap-2">
+                <Check size={18} className="text-green-600 mt-0.5" />
+                <div>
+                  <p className="font-medium text-green-800">
+                    Prazo de entrega estimado
+                  </p>
+                  <p className="text-sm text-green-700">
+                    {shippingInfo.method === 'normal'
+                      ? 'De 4 a 6 dias úteis'
+                      : 'De 1 a 2 dias úteis'}{' '}
+                    após confirmação do pagamento
+                  </p>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       </motion.div>

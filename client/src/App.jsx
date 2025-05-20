@@ -3,17 +3,17 @@ import ProtectedRoute from './components/ProtectedRoute';
 import { AuthProvider } from './contexts/AuthContext';
 import { CartProvider } from './contexts/CartContext';
 import { WishlistProvider } from './contexts/WishlistContext';
-import Account from './pages/Account'; // Página de conta do usuário
+import Account from './pages/Account';
 import Cart from './pages/Cart';
+import ForgotPassword from './pages/ForgotPassword';
 import Home from './pages/Home';
 import Identification from './pages/Identification';
 import Login from './pages/Login';
 import Payment from './pages/Payment';
-import Register from './pages/Register'; // Se você tiver uma página de registro
+import Register from './pages/Register';
 import SearchFound from './pages/SearchFound';
 import SneakerDetail from './pages/SneakerDetail';
 import Wishlist from './pages/Wishlist';
-// Removemos a referência ao BoletoPayment.jsx antigo
 
 function App() {
   return (
@@ -28,6 +28,7 @@ function App() {
 
               <Route path="/login" element={<Login />} />
               <Route path="/register" element={<Register />} />
+              <Route path="/forgot-password" element={<ForgotPassword />} />
 
               <Route
                 path="/account"

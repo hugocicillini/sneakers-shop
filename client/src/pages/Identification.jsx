@@ -121,25 +121,38 @@ const useAddressManagement = (formatUserDataForProfile) => {
 };
 
 // Hook para gerenciar métodos de envio
-const useShippingMethods = (navigate) => {
+const useShippingMethods = (navigate, subtotal) => {
   const [selectedShippingOption, setSelectedShippingOption] =
     useState('normal');
-  const [shippingMethods] = useState([
-    {
-      id: 'normal',
-      name: 'Normal - Frete Grátis',
-      description: '4 dias úteis',
-      price: 0,
-      selected: true,
-    },
-    {
-      id: 'express',
-      name: 'Entrega Expressa',
-      description: '2 dias úteis',
-      price: 15.9,
-      selected: false,
-    },
-  ]);
+  const [shippingMethods, setShippingMethods] = useState([]);
+
+  // Definir os métodos de envio com base no valor da compra
+  useEffect(() => {
+    const parsedSubtotal = parseFloat(subtotal);
+    const isFreeShipping =
+      parsedSubtotal >= import.meta.env.VITE_FREE_SHIPPING_PRICE;
+
+    setShippingMethods([
+      {
+        id: 'normal',
+        name: 'PAC',
+        description: '4 dias úteis',
+        price: isFreeShipping ? 0 : 19.9,
+        originalPrice: 19.9,
+        selected: true,
+        isFreeShipping: isFreeShipping,
+      },
+      {
+        id: 'express',
+        name: 'Sedex',
+        description: '2 dias úteis',
+        price: 29.9,
+        originalPrice: 29.9,
+        selected: false,
+        isFreeShipping: false,
+      },
+    ]);
+  }, [subtotal]);
 
   const handleShippingMethodChange = useCallback((value) => {
     setSelectedShippingOption(value);
@@ -164,6 +177,7 @@ const useShippingMethods = (navigate) => {
         address: address,
         method: selectedShippingOption,
         cost: selectedMethod?.price || 0,
+        isFreeShipping: selectedMethod?.isFreeShipping || false,
       };
 
       sessionStorage.setItem('shippingInfo', JSON.stringify(shippingInfo));
@@ -183,7 +197,7 @@ const useShippingMethods = (navigate) => {
 // Componente principal
 const Identification = () => {
   const { user, isAuthenticated, setUser } = useAuth();
-  const { items, subtotal } = useCart();
+  const { items, subtotal, totalWithDiscounts } = useCart();
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
 
@@ -203,7 +217,7 @@ const Identification = () => {
     shippingMethods,
     handleShippingMethodChange,
     handleContinue,
-  } = useShippingMethods(navigate);
+  } = useShippingMethods(navigate, subtotal);
 
   // Buscar dados do usuário e endereço
   useEffect(() => {
@@ -305,6 +319,7 @@ const Identification = () => {
               methods={shippingMethods}
               selectedValue={selectedShippingOption}
               onChange={handleShippingMethodChange}
+              subtotal={subtotal}
             />
 
             <AddressCard
@@ -320,6 +335,7 @@ const Identification = () => {
             <OrderSummary
               items={items}
               subtotal={subtotal}
+              totalWithDiscounts={totalWithDiscounts}
               shippingMethod={selectedShippingMethod}
               onContinue={() => handleContinue(address)}
               onBack={() => navigate('/checkout/cart')}

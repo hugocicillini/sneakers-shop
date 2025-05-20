@@ -1,5 +1,4 @@
 import { Button } from '@/components/ui/button';
-import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Separator } from '@/components/ui/separator';
 import {
@@ -23,7 +22,7 @@ import {
   Truck,
   X,
 } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 // Componente para exibir o número formatado
@@ -171,6 +170,7 @@ const Cart = () => {
     totalWithDiscounts,
     pixDiscount,
     loading,
+    couponDiscount,
   } = useCart();
 
   const navigate = useNavigate();
@@ -267,16 +267,36 @@ const Cart = () => {
 
     // Simulação de API de frete
     setTimeout(() => {
+      // Verificar se o valor da compra é elegível para frete grátis
+      const parsedSubtotal = parseFloat(subtotal);
+      const isFreeShipping = parsedSubtotal >= 300;
+
       setShippingMethods([
-        { id: 1, name: 'PAC', price: 19.9, days: '4-6 dias úteis' },
-        { id: 2, name: 'SEDEX', price: 29.9, days: '1-2 dias úteis' },
+        {
+          id: 1,
+          name: 'PAC',
+          price: isFreeShipping ? 0 : 19.9,
+          originalPrice: 19.9,
+          days: '4-6 dias úteis',
+          isFreeShipping: isFreeShipping,
+        },
+        {
+          id: 2,
+          name: 'SEDEX',
+          price: 29.9,
+          originalPrice: 29.9,
+          days: '1-2 dias úteis',
+          isFreeShipping: false,
+        },
       ]);
       setSelectedShipping(1);
       setCalculatingShipping(false);
 
       toast({
-        title: 'Frete calculado',
-        description: 'Opções de entrega disponíveis',
+        title: isFreeShipping ? 'Frete grátis disponível!' : 'Frete calculado',
+        description: isFreeShipping
+          ? 'Você ganhou frete grátis PAC para esta compra!'
+          : 'Opções de entrega disponíveis',
         variant: 'default',
       });
     }, 1500);
@@ -289,6 +309,30 @@ const Cart = () => {
       .replace(/(\d{5})(\d)/, '$1-$2')
       .substring(0, 9);
   };
+
+  // Efeito para atualizar o frete quando o valor do subtotal mudar
+  useEffect(() => {
+    // Só executar quando já tiver calculado frete pelo menos uma vez
+    if (shippingMethods.length > 0 && selectedShipping) {
+      const parsedSubtotal = parseFloat(subtotal);
+      const isFreeShipping = parsedSubtotal >= 300;
+
+      // Atualizar os métodos de frete com o novo status
+      setShippingMethods((prevMethods) =>
+        prevMethods.map((method) => {
+          if (method.id === 1) {
+            // PAC
+            return {
+              ...method,
+              price: isFreeShipping ? 0 : method.originalPrice,
+              isFreeShipping,
+            };
+          }
+          return method;
+        })
+      );
+    }
+  }, [subtotal]); // Executar sempre que o subtotal mudar
 
   return (
     <LayoutCheckout activeStep={1}>
@@ -555,23 +599,20 @@ const Cart = () => {
                       }
                       )
                     </span>
-                    {parseFloat(subtotal) >= 300 && (
+                    {shippingMethods.find((m) => m.id === selectedShipping)
+                      ?.isFreeShipping && (
                       <span className="ml-2 bg-green-100 text-green-700 text-xs px-2 py-0.5 rounded-full font-medium">
                         Grátis
                       </span>
                     )}
                   </span>
                   <span>
-                    {parseFloat(subtotal) >= 300 ? (
-                      <FormatCurrency value={0} />
-                    ) : (
-                      <FormatCurrency
-                        value={
-                          shippingMethods.find((m) => m.id === selectedShipping)
-                            ?.price || 0
-                        }
-                      />
-                    )}
+                    <FormatCurrency
+                      value={
+                        shippingMethods.find((m) => m.id === selectedShipping)
+                          ?.price || 0
+                      }
+                    />
                   </span>
                 </div>
               )}
@@ -591,6 +632,22 @@ const Cart = () => {
                   </span>
                   <span>
                     - <FormatCurrency value={pixDiscount} />
+                  </span>
+                </div>
+              )}
+
+              {/* Desconto do cupom, se existir */}
+              {appliedCoupon && parseFloat(couponDiscount) > 0 && (
+                <div className="flex justify-between text-blue-600 text-sm">
+                  <span className="flex items-center gap-1">
+                    <CheckIcon size={14} />
+                    Cupom {appliedCoupon.code}
+                    {appliedCoupon.discountType === 'percentage' && (
+                      <span>({appliedCoupon.discountValue}%)</span>
+                    )}
+                  </span>
+                  <span>
+                    - <FormatCurrency value={couponDiscount} />
                   </span>
                 </div>
               )}
