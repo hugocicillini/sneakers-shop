@@ -14,6 +14,7 @@ import Register from './pages/Register';
 import SearchFound from './pages/SearchFound';
 import SneakerDetail from './pages/SneakerDetail';
 import Wishlist from './pages/Wishlist';
+import Confirmation from './pages/Confirmation';
 
 function App() {
   return (
@@ -56,6 +57,9 @@ function App() {
               />
 
               <Route path="/checkout/payment" element={<Payment />} />
+
+              <Route path="/checkout/confirmation/:orderId" element={<Confirmation />} />
+
             </Routes>
           </BrowserRouter>
         </CartProvider>

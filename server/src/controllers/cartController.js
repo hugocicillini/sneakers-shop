@@ -116,12 +116,12 @@ export const addToCart = async (req, res) => {
           size,
         },
       });
-    }
-
-    // Usuário autenticado: processar adição ao carrinho
+    }    // Usuário autenticado: processar adição ao carrinho
     let cart = await Cart.findOne({ user: req.user.id, status: 'active' });
     if (!cart) {
+      // Criar um novo carrinho ativo se não existir
       cart = new Cart({ user: req.user.id, items: [] });
+      logger.info(`Novo carrinho ativo criado para o usuário ${req.user.id} durante adição de item`);
     }
 
     // Usar a imagem fornecida pelo cliente se disponível, senão buscar do produto
@@ -202,9 +202,9 @@ export const getCart = async (req, res) => {
         select: 'name brand slug finalPrice images discount',
       },
       { path: 'items.variant', select: 'size color price stock' },
-    ]);
-
-    if (!cart) {
+    ]);    if (!cart) {
+      // Aqui apenas retornamos um objeto vazio sem criar um novo carrinho
+      // Só criaremos um novo carrinho quando o usuário adicionar itens
       return res.status(200).json({
         success: true,
         message: 'Carrinho não encontrado',
@@ -331,19 +331,17 @@ export const removeFromCart = async (req, res) => {
         success: false,
         message: 'Item não encontrado no carrinho',
       });
-    }
-
-    // Remover o item
+    } // Remover o item
     activeCart.removeItem(cartItemId);
 
-    // Se o carrinho ficar vazio, apenas marcar como abandonado (sem excluir histórico)
-    if (activeCart.items.length === 0) {
-      // Marcar o carrinho atual como abandonado mas manter no banco de dados
-      activeCart.status = 'abandoned';
-      console.log(`Carrinho ${activeCart._id} marcado como abandonado`);
-    }
-
+    // Manteremos o carrinho como ativo mesmo se estiver vazio
+    // Isso permite que o usuário continue comprando sem problemas
     await activeCart.save();
+
+    // Registrar a remoção para fins de log
+    if (activeCart.items.length === 0) {
+      console.log(`Carrinho ${activeCart._id} está vazio mas permanece ativo`);
+    }
 
     // Popular dados para resposta se o carrinho ainda tiver itens
     if (activeCart.items.length > 0) {
@@ -388,10 +386,7 @@ export const clearCart = async (req, res) => {
         success: true,
         message: 'Carrinho já estava vazio',
       });
-    }
-
-    // Marcar como abandonado em vez de excluir
-    cart.status = 'abandoned';
+    } // Limpar os itens mas manter o carrinho ativo
     cart.items = [];
     await cart.save();
 
@@ -427,13 +422,13 @@ export const syncCart = async (req, res) => {
         success: false,
         message: 'Nenhum item para sincronizar',
       });
-    }
-
-    // Buscar ou criar carrinho para o usuário
+    }    // Buscar ou criar carrinho para o usuário
     let cart = await Cart.findOne({ user: req.user.id, status: 'active' });
 
     if (!cart) {
+      // Só criamos um novo carrinho se tivermos itens do localStorage para adicionar
       cart = new Cart({ user: req.user.id, items: [] });
+      logger.info(`Novo carrinho ativo criado para o usuário ${req.user.id} durante sincronização`);
     }
 
     // Processar cada item do carrinho local

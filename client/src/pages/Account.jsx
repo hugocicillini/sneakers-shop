@@ -17,59 +17,92 @@ import {
   getUserAddresses,
   updateUserAddress,
 } from '@/services/addresses.service';
+import { getUserOrders } from '@/services/order.service';
 import { getUser, updateUser } from '@/services/users.service';
-import { ChevronDown, ChevronUp, Loader2, Package } from 'lucide-react';
+import {
+  ChevronDown,
+  ChevronUp,
+  CreditCard,
+  Loader2,
+  Package,
+  QrCode,
+  Receipt,
+  Ticket,
+  Truck,
+} from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
+import OrderList from '@/components/Order';
+
+const statusMap = {
+  pending: {
+    label: 'Pedido Recebido',
+    color: 'bg-blue-100 text-blue-800',
+    step: 1,
+    description:
+      'Seu pedido foi recebido e está aguardando confirmação de pagamento.',
+  },
+  payment_approved: {
+    label: 'Pagamento Aprovado',
+    color: 'bg-green-100 text-green-800',
+    step: 2,
+    description: 'Pagamento confirmado! Seu pedido está sendo preparado.',
+  },
+  separating: {
+    label: 'Em Separação',
+    color: 'bg-yellow-100 text-yellow-800',
+    step: 3,
+    description: 'Estamos separando seus produtos para envio.',
+  },
+  shipping: {
+    label: 'Aguardando Transporte',
+    color: 'bg-orange-100 text-orange-800',
+    step: 4,
+    description:
+      'Seu pedido está pronto e aguardando coleta pela transportadora.',
+  },
+  in_transit: {
+    label: 'Em Transporte',
+    color: 'bg-purple-100 text-purple-800',
+    step: 5,
+    description: 'Seu pedido está a caminho do endereço de entrega.',
+  },
+  delivered: {
+    label: 'Entregue',
+    color: 'bg-green-200 text-green-900',
+    step: 6,
+    description: 'Pedido entregue com sucesso!',
+  },
+  cancelled: {
+    label: 'Cancelado',
+    color: 'bg-red-100 text-red-800',
+    step: 0,
+    description: 'Este pedido foi cancelado.',
+  },
+};
+
+const statusSteps = [
+  { key: 'pending', label: 'Recebido' },
+  { key: 'payment_approved', label: 'Pagamento' },
+  { key: 'separating', label: 'Separação' },
+  { key: 'shipping', label: 'Aguardando Transporte' },
+  { key: 'in_transit', label: 'Em Transporte' },
+  { key: 'delivered', label: 'Entregue' },
+  { key: 'cancelled', label: 'Cancelado' },
+];
+
+const paymentIcons = {
+  pix: <QrCode className="text-green-600" size={18} />,
+  boleto: <Ticket className="text-blue-600" size={18} />,
+  card: <CreditCard className="text-purple-600" size={18} />,
+};
+
+const formatCurrency = (value) =>
+  value?.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 
 const Account = () => {
   const { user, updateUserData } = useAuth();
   const [expandedOrders, setExpandedOrders] = useState({});
-  const [orders, setOrders] = useState([
-    {
-      id: '12345',
-      date: '2023-10-01',
-      status: 'Entregue',
-      items: [
-        {
-          name: 'Produto 1',
-          color: 'Vermelho',
-          size: 'M',
-          quantity: 2,
-          price: 49.99,
-        },
-        {
-          name: 'Produto 2',
-          color: 'Azul',
-          size: 'G',
-          quantity: 1,
-          price: 79.99,
-        },
-      ],
-      total: 179.97,
-    },
-    {
-      id: '12346',
-      date: '2023-10-02',
-      status: 'Em Trânsito',
-      items: [
-        {
-          name: 'Produto 3',
-          color: 'Preto',
-          size: 'P',
-          quantity: 1,
-          price: 29.99,
-        },
-        {
-          name: 'Produto 4',
-          color: 'Branco',
-          size: 'M',
-          quantity: 3,
-          price: 19.99,
-        },
-      ],
-      total: 89.96,
-    },
-  ]);
+  const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [userData, setUserData] = useState(null);
   const [addresses, setAddresses] = useState([]);
@@ -126,8 +159,24 @@ const Account = () => {
       }
     };
 
+    const fetchOrders = async () => {
+      try {
+        const response = await getUserOrders();
+        setOrders(response.data || []);
+      } catch (error) {
+        toast({
+          title: 'Erro ao buscar pedidos',
+          description: error.message,
+          variant: 'destructive',
+        });
+      } finally {
+        setLoading(false);
+      }
+    };
+
     if (user) {
       fetchUserData();
+      fetchOrders();
     }
   }, [user]);
 
@@ -412,82 +461,7 @@ const Account = () => {
                   <CardDescription>Histórico dos seus pedidos</CardDescription>
                 </CardHeader>
                 <CardContent>
-                  {orders.length > 0 ? (
-                    <div className="space-y-4">
-                      {orders.map((order) => (
-                        <Card key={order.id} className="border">
-                          <CardHeader
-                            className="py-4 cursor-pointer"
-                            onClick={() => toggleOrderExpand(order.id)}
-                          >
-                            <div className="flex justify-between items-center">
-                              <div>
-                                <p className="font-medium">
-                                  Pedido #{order.id}
-                                </p>
-                                <p className="text-sm text-gray-500">
-                                  {order.date}
-                                </p>
-                              </div>
-                              <div className="flex items-center gap-3">
-                                <span
-                                  className={`text-sm px-2 py-1 rounded ${
-                                    order.status === 'Entregue'
-                                      ? 'bg-green-100 text-green-800'
-                                      : 'bg-blue-100 text-blue-800'
-                                  }`}
-                                >
-                                  {order.status}
-                                </span>
-                                {expandedOrders[order.id] ? (
-                                  <ChevronUp size={18} />
-                                ) : (
-                                  <ChevronDown size={18} />
-                                )}
-                              </div>
-                            </div>
-                          </CardHeader>
-
-                          {expandedOrders[order.id] && (
-                            <>
-                              <CardContent className="pt-0">
-                                <div className="border-t my-2"></div>
-                                <div className="space-y-3">
-                                  {order.items.map((item, idx) => (
-                                    <div
-                                      key={idx}
-                                      className="flex justify-between"
-                                    >
-                                      <div>
-                                        <p>{item.name}</p>
-                                        <p className="text-sm text-gray-500">
-                                          {item.color}, Tamanho: {item.size},
-                                          Qtd: {item.quantity}
-                                        </p>
-                                      </div>
-                                      <p className="font-medium">
-                                        R$ {item.price.toFixed(2)}
-                                      </p>
-                                    </div>
-                                  ))}
-                                </div>
-                              </CardContent>
-                              <CardFooter className="flex justify-between border-t pt-4">
-                                <span className="font-bold">Total</span>
-                                <span className="font-bold">
-                                  R$ {order.total.toFixed(2)}
-                                </span>
-                              </CardFooter>
-                            </>
-                          )}
-                        </Card>
-                      ))}
-                    </div>
-                  ) : (
-                    <p className="text-center py-10 text-gray-500">
-                      Você ainda não possui pedidos
-                    </p>
-                  )}
+                  <OrderList orders={orders} />
                 </CardContent>
               </Card>
             </div>

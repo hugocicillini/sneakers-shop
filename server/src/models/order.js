@@ -7,9 +7,14 @@ const orderSchema = new mongoose.Schema(
       ref: 'User',
       required: true,
     },
-    orderItems: [
+    orderNumber: {
+      type: String,
+      required: true,
+      unique: true,
+    },
+    items: [
       {
-        sneakers: {
+        sneaker: {
           type: mongoose.Schema.Types.ObjectId,
           ref: 'Sneaker',
           required: true,
@@ -28,22 +33,56 @@ const orderSchema = new mongoose.Schema(
           type: Number,
           required: true,
         },
+        name: {
+          type: String,
+          required: true,
+        },
+        size: {
+          type: Number,
+          required: true,
+        },
+        color: {
+          type: String,
+          required: true,
+        },
+        image: {
+          type: String,
+          required: true,
+        },
       },
     ],
-    shippingAddress: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: 'Address',
-      required: true,
+    shipping: {
+      address: {
+        type: Object,
+        required: true,
+      },
+      method: {
+        type: String,
+        required: true,
+        enum: ['normal', 'express'],
+      },
+      cost: {
+        type: Number,
+        required: true,
+        default: 0,
+      },
+      trackingNumber: String,
     },
     paymentMethod: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: 'Payment',
+      type: String,
+      enum: ['credit_card', 'pix', 'boleto'],
+      required: false,
     },
-    paymentResult: {
-      id: String,
-      status: String,
-      update_time: String,
-      email_address: String,
+    paymentId: {
+      type: String,
+    },
+    paymentDetails: {
+      type: Object,
+    },
+    paymentStatus: {
+      type: String,
+      enum: ['pending', 'approved', 'rejected', 'refunded', 'cancelled'],
+      default: 'pending',
     },
     paymentExpiresAt: {
       type: Date,
@@ -51,12 +90,7 @@ const orderSchema = new mongoose.Schema(
         return new Date(+new Date() + 24 * 60 * 60 * 1000); // 24 horas por padrão
       },
     },
-    subtotalPrice: {
-      type: Number,
-      required: true,
-      default: 0.0,
-    },
-    shippingPrice: {
+    subtotal: {
       type: Number,
       required: true,
       default: 0.0,
@@ -65,7 +99,7 @@ const orderSchema = new mongoose.Schema(
       type: Number,
       default: 0.0,
     },
-    totalPrice: {
+    total: {
       type: Number,
       required: true,
     },
@@ -84,10 +118,40 @@ const orderSchema = new mongoose.Schema(
     status: {
       type: String,
       required: true,
-      enum: ['pending', 'processing', 'failed', 'delivered', 'cancelled'],
+      enum: [
+        'pending', // Recebido
+        'payment', // Pagamento
+        'processing', // Separação
+        'awaiting_shipment', // Aguardando Transporte
+        'in_transit', // Em Transporte
+        'delivered', // Entregue
+        'cancelled', // Cancelado
+        'failed', // Falha
+      ],
       default: 'pending',
     },
-    trackingNumber: String,
+    statusHistory: [
+      {
+        status: {
+          type: String,
+          enum: [
+            'pending',
+            'payment',
+            'processing',
+            'awaiting_shipment',
+            'in_transit',
+            'delivered',
+            'cancelled',
+            'failed',
+          ],
+        },
+        date: {
+          type: Date,
+          default: Date.now,
+        },
+        comment: String,
+      },
+    ],
     shippedAt: Date,
     deliveredAt: Date,
     cancelledAt: Date,
@@ -95,8 +159,9 @@ const orderSchema = new mongoose.Schema(
     sessionId: {
       type: String,
       default: null,
-      index: true, // Ajuda na performance de consultas por sessionId
+      index: true,
     },
+    preferenceId: String, // Para Mercado Pago
   },
   {
     timestamps: true,
@@ -105,15 +170,27 @@ const orderSchema = new mongoose.Schema(
 
 // Método para calcular o total do pedido
 orderSchema.pre('save', function (next) {
-  this.subtotalPrice = this.orderItems.reduce(
+  // Calcular subtotal com base nos items
+  this.subtotal = this.items.reduce(
     (acc, item) => acc + item.price * item.quantity,
     0
   );
-  this.totalPrice =
-    this.subtotalPrice + this.shippingPrice - this.discountAmount;
+
+  // Calcular total incluindo frete e descontos
+  this.total = this.subtotal + this.shipping.cost - this.discountAmount;
+
+  // Adicionar ao histórico de status se o status foi alterado
+  if (this.isModified('status')) {
+    this.statusHistory.push({
+      status: this.status,
+      date: new Date(),
+      comment: 'Status atualizado automaticamente',
+    });
+  }
+
   next();
 });
 
 const Order = mongoose.model('Order', orderSchema);
 
-export { Order, orderSchema };
+export { Order };

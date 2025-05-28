@@ -1,23 +1,9 @@
-// Serviço para manipulação do carrinho de compras - Versão simplificada
-
-// Helpers básicos
-const isAuthenticated = () => !!localStorage.getItem('token');
-
-const getAuthHeaders = () => ({
-  'Content-Type': 'application/json',
-  ...(localStorage.getItem('token')
-    ? { Authorization: `Bearer ${localStorage.getItem('token')}` }
-    : {}),
-});
-
-const getCartFromLocalStorage = () => {
-  const savedCart = localStorage.getItem('cart');
-  return savedCart ? JSON.parse(savedCart) : { items: [] };
-};
-
-const saveCartToLocalStorage = (cart) => {
-  localStorage.setItem('cart', JSON.stringify(cart));
-};
+import {
+  getAuthHeaders,
+  getCartFromLocalStorage,
+  isAuthenticated,
+  saveCartToLocalStorage,
+} from '@/lib/utils';
 
 // Buscar carrinho (do servidor se autenticado, ou do localStorage)
 export const getCart = async () => {
@@ -90,14 +76,11 @@ export const addToCart = async (item) => {
         }
       }
 
-      const response = await fetch(
-        `${import.meta.env.VITE_API_URL}/carts`,
-        {
-          method: 'POST',
-          headers: getAuthHeaders(),
-          body: JSON.stringify(cartItem),
-        }
-      );
+      const response = await fetch(`${import.meta.env.VITE_API_URL}/carts`, {
+        method: 'POST',
+        headers: getAuthHeaders(),
+        body: JSON.stringify(cartItem),
+      });
 
       if (response.ok) {
         return await response.json();
@@ -218,13 +201,10 @@ export const removeFromCart = async (cartItemId) => {
 export const clearCart = async () => {
   try {
     if (isAuthenticated()) {
-      const response = await fetch(
-        `${import.meta.env.VITE_API_URL}/carts`,
-        {
-          method: 'DELETE',
-          headers: getAuthHeaders(),
-        }
-      );
+      const response = await fetch(`${import.meta.env.VITE_API_URL}/carts`, {
+        method: 'DELETE',
+        headers: getAuthHeaders(),
+      });
 
       if (response.ok) {
         localStorage.removeItem('cart');

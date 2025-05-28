@@ -1,6 +1,6 @@
 import addressRoute from './addressRoute.js';
 import cartRoute from './cartRoute.js';
-// import paymentRoute from './paymentRoute.js';
+import paymentRoute from './paymentRoute.js';
 import couponRoute from './couponRoute.js';
 import orderRoute from './orderRoute.js';
 import reviewRoute from './reviewRoute.js';
@@ -17,7 +17,7 @@ const routes = (app) => {
   app.use(`${apiPrefix}/wishlists`, wishlistRoute);
   app.use(`${apiPrefix}/addresses`, addressRoute);
   app.use(`${apiPrefix}/reviews`, reviewRoute);
-  // app.use(`${apiPrefix}/payments`, paymentRoute);
+  app.use(`${apiPrefix}/payments`, paymentRoute);
   app.use(`${apiPrefix}/orders`, orderRoute);
   app.use(`${apiPrefix}/coupons`, couponRoute);
 };
