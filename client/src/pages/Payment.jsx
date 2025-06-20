@@ -1,27 +1,33 @@
+import OrderSummary from '@/components/checkout/OrderSummary';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import { useAuth } from '@/contexts/AuthContext';
 import { useCart } from '@/contexts/CartContext';
 import { toast } from '@/hooks/use-toast';
 import LayoutCheckout from '@/layout/LayoutCheckout';
+import { createOrder } from '@/services/order.service';
+import {
+  createPaymentPreference,
+  processPayment,
+} from '@/services/payment.service';
 import { initMercadoPago, Payment as MP_Payment } from '@mercadopago/sdk-react';
 import { motion } from 'framer-motion';
 import { ArrowLeft, Lock, MapPin, ShieldCheck } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
-// Formata valores para Real brasileiro
-const FormatCurrency = ({ value }) => {
-  return new Intl.NumberFormat('pt-BR', {
-    style: 'currency',
-    currency: 'BRL',
-  }).format(value);
-};
-
 const Payment = () => {
   const navigate = useNavigate();
   const { user, isAuthenticated } = useAuth();
-  const { items, subtotal, clearCart, totalWithDiscounts } = useCart();
+  const {
+    items,
+    subtotal,
+    clearCart,
+    totalWithDiscounts,
+    appliedCoupon,
+    couponDiscount,
+    calculatePixDiscount,
+  } = useCart();
 
   const [loading, setLoading] = useState(true);
   const [processingOrder, setProcessingOrder] = useState(false);
@@ -29,7 +35,6 @@ const Payment = () => {
   const [orderId, setOrderId] = useState(null);
   const [preferenceId, setPreferenceId] = useState(null);
 
-  // Verifica autenticação, carrinho e carrega endereço
   useEffect(() => {
     if (!isAuthenticated) {
       navigate('/login?redirect=/checkout/payment');
@@ -52,9 +57,7 @@ const Payment = () => {
     setLoading(false);
   }, [isAuthenticated, items, navigate]);
 
-  // Busca preferenceId do backend
   useEffect(() => {
-    // Inicializa MercadoPago apenas uma vez (v1.x)
     initMercadoPago(import.meta.env.VITE_MERCADO_PAGO_PUBLIC_KEY, {
       locale: 'pt-BR',
     });
@@ -63,38 +66,19 @@ const Payment = () => {
       if (!shippingInfo || items.length === 0) return;
       setLoading(true);
       try {
-        // 1. Solicita preferenceId ao backend
-        const prefRes = await fetch(
-          `${import.meta.env.VITE_API_URL}/payments/preference`,
-          {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              Authorization: `Bearer ${localStorage.getItem('token')}`,
-            },
-            body: JSON.stringify({ items, shippingInfo }),
-          }
-        );
-        const prefData = await prefRes.json();
+        // 1. Solicita preferenceId ao backend usando service
+        const prefData = await createPaymentPreference(items, shippingInfo);
+
         if (prefData.success && prefData.preferenceId) {
           setPreferenceId(prefData.preferenceId);
-          // 2. Cria o pedido já com o preferenceId
-          const orderRes = await fetch(
-            `${import.meta.env.VITE_API_URL}/orders`,
-            {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                Authorization: `Bearer ${localStorage.getItem('token')}`,
-              },
-              body: JSON.stringify({
-                shippingAddress: shippingInfo.address,
-                shippingMethod: shippingInfo.method,
-                preferenceId: prefData.preferenceId,
-              }),
-            }
-          );
-          const orderData = await orderRes.json();
+
+          // 2. Cria o pedido já com o preferenceId usando service
+          const orderData = await createOrder({
+            shippingAddress: shippingInfo.address,
+            shippingMethod: shippingInfo.method,
+            preferenceId: prefData.preferenceId,
+          });
+
           if (orderData.success && orderData.data?.orderId) {
             setOrderId(orderData.data.orderId);
           } else {
@@ -112,16 +96,17 @@ const Payment = () => {
           });
         }
       } catch (error) {
+        console.error('Erro ao buscar dados de pagamento:', error);
         toast({
           title: 'Erro',
-          description: 'Erro ao conectar com o servidor de pagamentos.',
+          description:
+            error.message || 'Erro ao conectar com o servidor de pagamentos.',
           variant: 'destructive',
         });
       }
       setLoading(false);
     };
     fetchPreferenceIdAndCreateOrder();
-    // eslint-disable-next-line
   }, [shippingInfo, items]);
 
   if (loading || !shippingInfo || !preferenceId) {
@@ -137,8 +122,61 @@ const Payment = () => {
     );
   }
 
-  const shippingCost = shippingInfo?.cost || 0;
-  const total = parseFloat(totalWithDiscounts) + parseFloat(shippingCost);
+  const shippingMethod = {
+    id: shippingInfo.method,
+    name: shippingInfo.method === 'normal' ? 'PAC' : 'SEDEX',
+    price: shippingInfo.cost || 0,
+    isFreeShipping: shippingInfo.isFreeShipping || false,
+  };
+
+  const calculations = {
+    subtotalValue: parseFloat(subtotal) || 0,
+    couponDiscountValue: parseFloat(couponDiscount) || 0,
+    shippingValue: shippingMethod.price || 0,
+
+    get totalWithCoupon() {
+      return this.subtotalValue - this.couponDiscountValue;
+    },
+
+    get totalForPayment() {
+      return this.totalWithCoupon + this.shippingValue;
+    },
+  };
+
+  const handlePaymentSubmit = async ({ selectedPaymentMethod, formData }) => {
+    setProcessingOrder(true);
+    const paymentData = {
+      ...formData,
+      paymentMethod: selectedPaymentMethod,
+      preferenceId,
+    };
+    try {
+      const result = await processPayment(paymentData);
+      if (result.success) {
+        clearCart();
+        navigate(`/checkout/confirmation/${result.data.orderId || ''}`);
+        return Promise.resolve();
+      } else {
+        toast({
+          title: 'Erro no pagamento',
+          description: result.message || 'Erro ao processar pagamento',
+          variant: 'destructive',
+        });
+        setProcessingOrder(false);
+        return Promise.reject();
+      }
+    } catch (error) {
+      console.error('Erro no pagamento:', error);
+      toast({
+        title: 'Erro no pagamento',
+        description:
+          error.message || 'Erro ao conectar com o servidor de pagamentos',
+        variant: 'destructive',
+      });
+      setProcessingOrder(false);
+      return Promise.reject();
+    }
+  };
 
   return (
     <LayoutCheckout activeStep={3}>
@@ -160,12 +198,12 @@ const Payment = () => {
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-          <div className="md:col-span-2">
+          <div className="md:col-span-2 space-y-6">
             <div className="bg-white rounded-lg shadow-sm border p-6">
               <h2 className="text-xl font-semibold mb-4">Escolha como pagar</h2>
               <MP_Payment
                 initialization={{
-                  amount: total,
+                  amount: calculations.totalForPayment, // 🎯 Valor SEM desconto PIX
                   preferenceId,
                   payer: {
                     firstName: user?.name?.split(' ')[0] || '',
@@ -182,56 +220,7 @@ const Payment = () => {
                     debitCard: 'all',
                   },
                 }}
-                onSubmit={async ({ selectedPaymentMethod, formData }) => {
-                  setProcessingOrder(true);
-                  const paymentData = {
-                    ...formData,
-                    paymentMethod: selectedPaymentMethod,
-                    preferenceId,
-                  };
-                  try {
-                    const res = await fetch(
-                      `${import.meta.env.VITE_API_URL}/payments/card`,
-                      {
-                        method: 'POST',
-                        headers: {
-                          'Content-Type': 'application/json',
-                          Authorization: `Bearer ${localStorage.getItem(
-                            'token'
-                          )}`,
-                        },
-                        body: JSON.stringify(paymentData),
-                      }
-                    );
-                    const result = await res.json();
-                    console.log('Payment result:', result);
-                    if (result.success) {
-                      clearCart();
-                      navigate(
-                        `/checkout/confirmation/${result.data.orderId || ''}`
-                      );
-                      return Promise.resolve();
-                    } else {
-                      toast({
-                        title: 'Erro no pagamento',
-                        description:
-                          result.message || 'Erro ao processar pagamento',
-                        variant: 'destructive',
-                      });
-                      setProcessingOrder(false);
-                      return Promise.reject();
-                    }
-                  } catch {
-                    toast({
-                      title: 'Erro no pagamento',
-                      description:
-                        'Erro ao conectar com o servidor de pagamentos',
-                      variant: 'destructive',
-                    });
-                    setProcessingOrder(false);
-                    return Promise.reject();
-                  }
-                }}
+                onSubmit={handlePaymentSubmit}
                 onError={(error) => {
                   toast({
                     title: 'Erro no formulário de pagamento',
@@ -250,7 +239,7 @@ const Payment = () => {
               />
             </div>
 
-            <div className="mt-6 flex justify-center items-center gap-6 py-4 px-6 bg-white rounded-lg border">
+            <div className="flex justify-center items-center gap-6 py-4 px-6 bg-white rounded-lg border">
               <div className="flex items-center gap-2">
                 <Lock size={20} className="text-gray-500" />
                 <span className="text-sm text-gray-600 font-medium">
@@ -265,86 +254,8 @@ const Payment = () => {
                 </span>
               </div>
             </div>
-          </div>
 
-          <div className="md:col-span-1 space-y-6">
-            <div className="bg-white p-5 rounded-lg shadow-sm border">
-              <h2 className="font-semibold text-lg mb-4">Resumo da compra</h2>
-
-              <div className="space-y-3 mb-4 max-h-[200px] overflow-y-auto">
-                {items.map((item) => (
-                  <div key={item.cartItemId} className="flex gap-3">
-                    <div className="w-16 h-16 bg-gray-100 rounded overflow-hidden border flex-shrink-0">
-                      <img
-                        src={item.image}
-                        alt={item.name}
-                        className="w-full h-full object-cover"
-                      />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium truncate">
-                        {item.name}
-                      </p>
-                      <p className="text-xs text-gray-500">
-                        Tam: {item.size} | Cor: {item.color || 'N/A'}
-                      </p>
-                      <div className="flex justify-between items-center mt-1">
-                        <p className="text-xs text-gray-500">
-                          Qtd: {item.quantity}
-                        </p>
-                        <p className="text-sm font-medium">
-                          <FormatCurrency value={item.price * item.quantity} />
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-
-              <Separator className="my-4" />
-
-              <div className="space-y-2 text-sm">
-                <div className="flex justify-between">
-                  <span>
-                    Subtotal ({items.length}{' '}
-                    {items.length === 1 ? 'item' : 'itens'})
-                  </span>
-                  <span>
-                    <FormatCurrency value={subtotal} />
-                  </span>
-                </div>
-
-                <div className="flex justify-between">
-                  <span>Frete</span>
-                  <span>
-                    {shippingInfo.isFreeShipping ? (
-                      <span className="text-green-600 font-medium">Grátis</span>
-                    ) : (
-                      <FormatCurrency value={shippingCost} />
-                    )}
-                  </span>
-                </div>
-
-                {subtotal > totalWithDiscounts && (
-                  <div className="flex justify-between text-green-600">
-                    <span>Desconto</span>
-                    <span>
-                      - <FormatCurrency value={subtotal - totalWithDiscounts} />
-                    </span>
-                  </div>
-                )}
-              </div>
-
-              <Separator className="my-4" />
-
-              <div className="flex justify-between font-bold text-lg">
-                <span>Total</span>
-                <span>
-                  <FormatCurrency value={total} />
-                </span>
-              </div>
-            </div>
-
+            {/* 🎯 Endereço de entrega */}
             <div className="bg-white p-5 rounded-lg shadow-sm border">
               <div className="flex items-center justify-between mb-3">
                 <h2 className="font-semibold flex items-center gap-2">
@@ -374,10 +285,30 @@ const Payment = () => {
                     {shippingInfo.address.neighborhood} -{' '}
                     {shippingInfo.address.city}, {shippingInfo.address.state}
                   </p>
-                  <p>CEP: {shippingInfo.address.zipcode}</p>
+                  <p>CEP: {shippingInfo.address.zipCode}</p>
                 </div>
               )}
             </div>
+          </div>
+
+          {/* 🎯 OrderSummary na lateral */}
+          <div className="md:col-span-1">
+            <OrderSummary
+              items={items}
+              subtotal={subtotal}
+              shippingMethod={shippingMethod}
+              appliedCoupon={appliedCoupon}
+              couponDiscount={couponDiscount}
+              calculatePixDiscount={calculatePixDiscount}
+              onContinue={() => {}}
+              onBack={() => navigate('/checkout/identification')}
+              disableContinue={true}
+              showBackButton={false}
+              continueButtonText="Finalizar Pagamento"
+              backButtonText="Voltar para dados"
+              showItemsList={true}
+              isPaymentPage={true}
+            />
           </div>
         </div>
       </motion.div>

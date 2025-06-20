@@ -76,12 +76,10 @@ const cartItemSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-// Virtual para calcular subtotal
 cartItemSchema.virtual('subtotal').get(function () {
   return this.price * this.quantity;
 });
 
-// Virtual para calcular subtotal com desconto
 cartItemSchema.virtual('subtotalWithDiscount').get(function () {
   return (this.price - this.discount) * this.quantity;
 });

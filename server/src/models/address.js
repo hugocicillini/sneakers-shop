@@ -73,61 +73,92 @@ const addressSchema = new mongoose.Schema(
 );
 
 addressSchema.pre('save', async function (next) {
-  if (this.isDefault) {
-    try {
-      // Desmarcar qualquer outro endereço padrão deste usuário
+  try {
+    if (this.isDefault && this.isModified('isDefault')) {
+      // 1. Desmarcar todos os outros endereços padrão deste usuário
       await this.constructor.updateMany(
-        { user: this.user, _id: { $ne: this._id } },
+        {
+          user: this.user,
+          _id: { $ne: this._id },
+          isDefault: true,
+        },
         { $set: { isDefault: false } }
       );
 
-      // Atualizar o defaultAddress no modelo Client
-      // Usamos mongoose.model para evitar problemas de importação circular
+      // 2. Atualizar o defaultAddress no modelo Client
       const Client = mongoose.model('Client');
 
-      const client = await Client.findOne(this.user);
-
-      if (client) {
-        // Remover o filtro userType, pois já está implícito pelo modelo Client
-        await Client.updateOne(
-          { _id: this.user },
-          { $set: { defaultAddress: this._id } }
-        );
-      }
-    } catch (error) {
-      logger.warn(`Erro ao atualizar endereços: ${error.message}`);
-    }
-  }
-  next();
-});
-
-// Middleware para tratar exclusão de endereço padrão
-addressSchema.pre('deleteOne', { document: true }, async function () {
-  try {
-    // Se o endereço sendo excluído for o padrão
-    if (this.isDefault) {
+      const updateResult = await Client.findByIdAndUpdate(
+        this.user,
+        { $set: { defaultAddress: this._id } },
+        { new: true }
+      );
+    } else if (
+      !this.isDefault &&
+      this.isModified('isDefault') &&
+      this.isNew === false
+    ) {
       const Client = mongoose.model('Client');
       const client = await Client.findById(this.user);
 
-      if (client) {
-        // Remover a referência no cliente
-        client.defaultAddress = undefined;
-        await client.save();
+      if (
+        client &&
+        client.defaultAddress &&
+        client.defaultAddress.toString() === this._id.toString()
+      ) {
+        const newDefaultAddress = await this.constructor
+          .findOne({
+            user: this.user,
+            _id: { $ne: this._id },
+            isDefault: true,
+          })
+          .sort({ createdAt: -1 });
 
-        // Opcional: definir outro endereço como padrão
-        const nextAddress = await Address.findOne({
-          user: this.user,
-          _id: { $ne: this._id },
-        }).sort({ createdAt: -1 });
-
-        if (nextAddress) {
-          nextAddress.isDefault = true;
-          await nextAddress.save();
+        if (newDefaultAddress) {
+          await Client.findByIdAndUpdate(this.user, {
+            $set: { defaultAddress: newDefaultAddress._id },
+          });
+        } else {
+          await Client.findByIdAndUpdate(this.user, {
+            $unset: { defaultAddress: 1 },
+          });
         }
       }
     }
   } catch (error) {
-    logger.warn(`Erro ao processar exclusão de endereço: ${error.message}`);
+    logger.error('Erro no middleware pre-save do Address:', error);
+  }
+
+  next();
+});
+
+addressSchema.pre('deleteOne', { document: true }, async function () {
+  try {
+    if (this.isDefault) {
+      const Client = mongoose.model('Client');
+
+      const nextAddress = await this.constructor
+        .findOne({
+          user: this.user,
+          _id: { $ne: this._id },
+        })
+        .sort({ createdAt: -1 });
+
+      if (nextAddress) {
+        nextAddress.isDefault = true;
+        await nextAddress.save();
+
+        await Client.findByIdAndUpdate(this.user, {
+          $set: { defaultAddress: nextAddress._id },
+        });
+      } else {
+        await Client.findByIdAndUpdate(this.user, {
+          $unset: { defaultAddress: 1 },
+        });
+      }
+    }
+  } catch (error) {
+    logger.error('Erro no middleware pre-deleteOne do Address:', error);
   }
 });
 

@@ -1,4 +1,5 @@
 import mongoose from 'mongoose';
+import logger  from '../utils/logger.js';
 
 const sneakerSchema = new mongoose.Schema(
   {
@@ -160,7 +161,6 @@ const sneakerSchema = new mongoose.Schema(
   }
 );
 
-// Virtuals para relacionamentos
 sneakerSchema.virtual('variants', {
   ref: 'SneakerVariant',
   localField: '_id',
@@ -173,19 +173,18 @@ sneakerSchema.virtual('reviews', {
   foreignField: 'sneaker',
 });
 
-// Middleware simplificado - apenas validação básica de consistência
 sneakerSchema.pre('validate', function (next) {
-  // Validar consistência dos preços (opcional)
-  if (this.basePrice > 0 && this.baseDiscount >= 0 && this.baseDiscount <= 100) {
-    // Calcular o finalPrice esperado para verificar consistência com o valor recebido
+  if (
+    this.basePrice > 0 &&
+    this.baseDiscount >= 0 &&
+    this.baseDiscount <= 100
+  ) {
     const expectedFinalPrice = parseFloat(
       (this.basePrice * (1 - this.baseDiscount / 100)).toFixed(2)
     );
-    
-    // Verificar se o finalPrice está dentro de uma margem de erro aceitável (0.01)
+
     const isConsistent = Math.abs(this.finalPrice - expectedFinalPrice) < 0.01;
-    
-    // Se inconsistente, ajustar para manter integridade (opcional)
+
     if (!isConsistent) {
       console.warn('Preços inconsistentes recebidos, ajustando finalPrice');
       this.finalPrice = expectedFinalPrice;
@@ -195,40 +194,34 @@ sneakerSchema.pre('validate', function (next) {
   next();
 });
 
-// Middleware pré-salvamento - gera slug e SKU e configura cor padrão
 sneakerSchema.pre('save', function (next) {
-  // Gerar slug a partir do nome
   const removeAccents = (str) => {
     return str
-      .normalize('NFD') // Normaliza decomposição
-      .replace(/[\u0300-\u036f]/g, '') // Remove diacríticos
-      .toLowerCase() // Converte para minúsculo
-      .replace(/[^\w\s-]/g, '') // Remove caracteres especiais
-      .replace(/\s+/g, '-') // Substitui espaços por hífens
-      .replace(/--+/g, '-') // Remove hífens duplicados
-      .trim(); // Remove espaços no início/fim
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase()
+      .replace(/[^\w\s-]/g, '')
+      .replace(/\s+/g, '-')
+      .replace(/--+/g, '-')
+      .trim();
   };
 
   this.slug = removeAccents(this.name);
 
-  // Gerar SKU automaticamente
   if (!this.sku) {
     const getBrandCode = async () => {
       try {
-        // Tentar buscar a marca para obter o código correto
         const Brand = mongoose.model('Brand');
         const brand = await Brand.findById(this.brand);
         if (brand) {
-          // Pegar 3 primeiras letras do nome da marca
           return brand.name.substring(0, 3).toUpperCase();
         }
       } catch (err) {
-        // Em caso de erro, usar os primeiros caracteres do ID
+        logger.error(`Erro ao buscar marca: ${err.message}`);
       }
       return this.brand.toString().substring(0, 3).toUpperCase();
     };
 
-    // Pegar iniciais do nome (até 2 palavras)
     const getProductInitials = () => {
       const words = this.name.split(' ').filter((word) => word.length > 1);
       if (words.length >= 2) {
@@ -239,20 +232,16 @@ sneakerSchema.pre('save', function (next) {
 
     const currentYear = new Date().getFullYear();
 
-    // Define SKU combinando informações
-    // Como getBrandCode é assíncrono, precisamos tratar com cuidado
     getBrandCode()
       .then((brandCode) => {
         this.sku = `${brandCode}-${getProductInitials()}-${currentYear}`;
       })
       .catch(() => {
-        // Fallback em caso de erro
         const brandCode = this.brand.toString().substring(0, 3).toUpperCase();
         this.sku = `${brandCode}-${getProductInitials()}-${currentYear}`;
       });
   }
 
-  // Configurar cor padrão
   if (this.availableColors?.length > 0) {
     const defaultColor = this.availableColors.find((c) => c.isDefault);
 
@@ -267,7 +256,6 @@ sneakerSchema.pre('save', function (next) {
   next();
 });
 
-// Método utilitário para atualizar avaliações
 sneakerSchema.methods.updateRatingInfo = async function () {
   const Review = mongoose.model('Review');
   const reviews = await Review.find({
@@ -287,7 +275,6 @@ sneakerSchema.methods.updateRatingInfo = async function () {
   return this.rating;
 };
 
-// Método unificado para verificar disponibilidade
 sneakerSchema.methods.checkInventory = async function (options = {}) {
   const SneakerVariant = mongoose.model('SneakerVariant');
   const query = { sneaker: this._id, isActive: true };
@@ -299,7 +286,6 @@ sneakerSchema.methods.checkInventory = async function (options = {}) {
   return await SneakerVariant.find(query);
 };
 
-// Índices para performance
 sneakerSchema.index({ brand: 1, category: 1, isActive: 1 });
 sneakerSchema.index({ name: 'text', description: 'text' });
 

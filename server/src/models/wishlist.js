@@ -18,7 +18,7 @@ const wishlistSchema = new mongoose.Schema(
           type: Date,
           default: Date.now,
         },
-        notes: String, // Opcional: permitir que usuários adicionem notas aos itens
+        notes: String,
       },
     ],
   },
@@ -27,9 +27,7 @@ const wishlistSchema = new mongoose.Schema(
   }
 );
 
-// Método para adicionar um tênis à wishlist
 wishlistSchema.methods.addSneaker = async function (sneakerId) {
-  // Verifica se o tênis já está na wishlist
   const exists = this.sneakers.some(
     (item) => item.sneaker.toString() === sneakerId.toString()
   );
@@ -42,7 +40,6 @@ wishlistSchema.methods.addSneaker = async function (sneakerId) {
   return this;
 };
 
-// Método para remover um tênis da wishlist
 wishlistSchema.methods.removeSneaker = async function (sneakerId) {
   this.sneakers = this.sneakers.filter(
     (item) => item.sneaker.toString() !== sneakerId.toString()

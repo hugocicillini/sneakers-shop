@@ -1,6 +1,5 @@
 import { useState } from 'react';
 
-// Adicionar zoom ao passar o mouse
 const ImageZoom = ({ src, alt }) => {
   const [position, setPosition] = useState({ x: 0, y: 0 });
   const [showZoom, setShowZoom] = useState(false);

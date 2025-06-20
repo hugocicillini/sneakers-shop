@@ -1,3 +1,5 @@
+import { getAuthHeaders } from '@/lib/utils';
+
 export const loginUser = async (email, password) => {
   try {
     const response = await fetch(
@@ -14,7 +16,6 @@ export const loginUser = async (email, password) => {
     const data = await response.json().catch(() => ({}));
 
     if (!response.ok) {
-      // Tratamento mais detalhado por código de status
       if (response.status === 401) {
         return {
           success: false,
@@ -83,10 +84,7 @@ export const getUser = async () => {
   try {
     const response = await fetch(`${import.meta.env.VITE_API_URL}/users`, {
       method: 'GET',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${localStorage.getItem('token')}`,
-      },
+      headers: getAuthHeaders(),
     });
 
     if (!response.ok) {
@@ -105,10 +103,7 @@ export const updateUser = async (userData) => {
   try {
     const response = await fetch(`${import.meta.env.VITE_API_URL}/users`, {
       method: 'PUT',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${localStorage.getItem('token')}`,
-      },
+      headers: getAuthHeaders(),
       body: JSON.stringify(userData),
     });
 
@@ -126,10 +121,7 @@ export const refreshToken = async () => {
       `${import.meta.env.VITE_API_URL}/users/refresh-token`,
       {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${localStorage.getItem('token')}`,
-        },
+        headers: getAuthHeaders(),
       }
     );
 
@@ -142,5 +134,34 @@ export const refreshToken = async () => {
   } catch (error) {
     console.error('Erro ao renovar token:', error);
     return { success: false, message: error.message };
+  }
+};
+
+export const requestPasswordReset = async (email) => {
+  try {
+    const response = await fetch(
+      `${import.meta.env.VITE_API_URL}/users/request-password-reset`,
+      {
+        method: 'POST',
+        headers: getAuthHeaders(),
+        body: JSON.stringify({ email }),
+      }
+    );
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      return {
+        success: false,
+        message: errorData.message || 'Erro ao solicitar redefinição de senha',
+      };
+    }
+
+    return { success: true, message: 'Email enviado com sucesso' };
+  } catch (error) {
+    console.error('Erro ao solicitar redefinição de senha:', error);
+    return {
+      success: false,
+      message: 'Erro de conexão ao tentar solicitar redefinição de senha',
+    };
   }
 };

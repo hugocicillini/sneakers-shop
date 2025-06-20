@@ -15,15 +15,15 @@ const UserInfoCard = ({ userData, onUserUpdated, formattedUserData }) => (
     </div>
 
     <div className="grid grid-cols-1 gap-4">
-      <div className="bg-gray-50 p-3 rounded">
+      <div className="bg-gray-50 p-2 rounded-md">
         <p className="text-xs text-gray-500 mb-1">Nome completo</p>
         <p className="font-medium">{userData?.name || 'Não disponível'}</p>
       </div>
-      <div className="bg-gray-50 p-3 rounded">
+      <div className="bg-gray-50 p-2 rounded-md">
         <p className="text-xs text-gray-500 mb-1">E-mail</p>
         <p className="font-medium">{userData?.email || 'Não disponível'}</p>
       </div>
-      <div className="bg-gray-50 p-3 rounded flex items-start">
+      <div className="bg-gray-50 p-2 rounded-md flex items-start">
         <div className="flex-grow">
           <p className="text-xs text-gray-500 mb-1">Telefone</p>
           <p className="font-medium">{userData?.phone || '-'}</p>

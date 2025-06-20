@@ -1,11 +1,10 @@
+import { getAuthHeaders } from '@/lib/utils';
+
 export const getWishlist = async () => {
   try {
     const response = await fetch(`${import.meta.env.VITE_API_URL}/wishlists`, {
       method: 'GET',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${localStorage.getItem('token')}`,
-      },
+      headers: getAuthHeaders(),
     });
 
     if (!response.ok) {
@@ -31,10 +30,7 @@ export const addToWishlist = async (sneakerId) => {
   try {
     const response = await fetch(`${import.meta.env.VITE_API_URL}/wishlists`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${localStorage.getItem('token')}`,
-      },
+      headers: getAuthHeaders(),
       body: JSON.stringify({ sneakerId }),
     });
 
@@ -66,10 +62,7 @@ export const removeFromWishlist = async (sneakerId) => {
       `${import.meta.env.VITE_API_URL}/wishlists/${sneakerId}`,
       {
         method: 'DELETE',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${localStorage.getItem('token')}`,
-        },
+        headers: getAuthHeaders(),
       }
     );
 

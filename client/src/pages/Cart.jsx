@@ -1,3 +1,4 @@
+import OrderSummary from '@/components/checkout/OrderSummary';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Separator } from '@/components/ui/separator';
@@ -25,7 +26,6 @@ import {
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
-// Componente para exibir o número formatado
 const FormatCurrency = ({ value }) => {
   return new Intl.NumberFormat('pt-BR', {
     style: 'currency',
@@ -33,7 +33,6 @@ const FormatCurrency = ({ value }) => {
   }).format(value);
 };
 
-// Componente de contador de quantidade
 const QuantityControl = ({ quantity, onIncrease, onDecrease, disabled }) => (
   <div className="flex items-center border rounded shadow-sm">
     <Button
@@ -60,9 +59,10 @@ const QuantityControl = ({ quantity, onIncrease, onDecrease, disabled }) => (
   </div>
 );
 
-// Componente do item do carrinho
 const CartItem = ({ item, updateQuantity, removeItem, loading }) => {
-  const itemTotal = (item.price * item.quantity).toFixed(2);
+  const itemTotal = (
+    (item.originalPrice || item.price) * item.quantity
+  ).toFixed(2);
   const [isRemoving, setIsRemoving] = useState(false);
 
   const handleRemove = async () => {
@@ -132,7 +132,7 @@ const CartItem = ({ item, updateQuantity, removeItem, loading }) => {
       </div>
 
       <div className="col-span-4 sm:col-span-2 mt-4 sm:mt-0 text-left sm:text-center font-medium">
-        <FormatCurrency value={item.price} />
+        <FormatCurrency value={item.originalPrice || item.price} />
       </div>
 
       <div className="col-span-4 sm:col-span-2 mt-4 sm:mt-0 text-right">
@@ -154,7 +154,6 @@ const Cart = () => {
   const [couponError, setCouponError] = useState(null);
 
   const [cep, setCep] = useState('');
-  const [giftChecked, setGiftChecked] = useState(false);
   const [calculatingShipping, setCalculatingShipping] = useState(false);
   const [shippingMethods, setShippingMethods] = useState([]);
   const [selectedShipping, setSelectedShipping] = useState(null);
@@ -164,11 +163,9 @@ const Cart = () => {
     updateQuantity,
     removeItem,
     subtotal,
-    cartCount,
     applyCoupon,
     appliedCoupon,
-    totalWithDiscounts,
-    pixDiscount,
+    calculatePixDiscount,
     loading,
     couponDiscount,
   } = useCart();
@@ -182,14 +179,13 @@ const Cart = () => {
     setCouponError('');
 
     try {
-      // Preparar os dados do carrinho para validação
       const cartData = {
         cartTotal: parseFloat(subtotal),
         cartItems: items.map((item) => ({
           sneakerId: item.sneakerId,
-          price: item.price,
+          price: item.originalPrice || item.price,
           quantity: item.quantity,
-          categoryId: item.categoryId, // Adicione se disponível
+          categoryId: item.categoryId,
         })),
       };
 
@@ -227,7 +223,6 @@ const Cart = () => {
     }
   };
 
-  // Função para remover o cupom aplicado
   const removeCoupon = () => {
     applyCoupon(null);
     toast({
@@ -237,7 +232,6 @@ const Cart = () => {
     });
   };
 
-  // Função para continuar para o próximo passo
   const handleContinue = () => {
     if (items.length === 0) {
       toast({
@@ -249,7 +243,6 @@ const Cart = () => {
     }
 
     sessionStorage.setItem('allowIdentification', 'true');
-
     navigate('/checkout/identification');
   };
 
@@ -265,11 +258,11 @@ const Cart = () => {
 
     setCalculatingShipping(true);
 
-    // Simulação de API de frete
     setTimeout(() => {
-      // Verificar se o valor da compra é elegível para frete grátis
-      const parsedSubtotal = parseFloat(subtotal);
-      const isFreeShipping = parsedSubtotal >= 300;
+      const subtotalValue = parseFloat(subtotal) || 0;
+      const couponValue = parseFloat(couponDiscount) || 0;
+      const totalWithCoupon = subtotalValue - couponValue;
+      const isFreeShipping = totalWithCoupon >= 300;
 
       setShippingMethods([
         {
@@ -302,7 +295,6 @@ const Cart = () => {
     }, 1500);
   };
 
-  // Formatar CEP durante digitação
   const formatCEP = (value) => {
     return value
       .replace(/\D/g, '')
@@ -310,18 +302,17 @@ const Cart = () => {
       .substring(0, 9);
   };
 
-  // Efeito para atualizar o frete quando o valor do subtotal mudar
+  // Atualizar frete quando subtotal ou cupom mudam
   useEffect(() => {
-    // Só executar quando já tiver calculado frete pelo menos uma vez
     if (shippingMethods.length > 0 && selectedShipping) {
-      const parsedSubtotal = parseFloat(subtotal);
-      const isFreeShipping = parsedSubtotal >= 300;
+      const subtotalValue = parseFloat(subtotal) || 0;
+      const couponValue = parseFloat(couponDiscount) || 0;
+      const totalWithCoupon = subtotalValue - couponValue;
+      const isFreeShipping = totalWithCoupon >= 300;
 
-      // Atualizar os métodos de frete com o novo status
       setShippingMethods((prevMethods) =>
         prevMethods.map((method) => {
           if (method.id === 1) {
-            // PAC
             return {
               ...method,
               price: isFreeShipping ? 0 : method.originalPrice,
@@ -332,7 +323,12 @@ const Cart = () => {
         })
       );
     }
-  }, [subtotal]); // Executar sempre que o subtotal mudar
+  }, [subtotal, couponDiscount]);
+
+  // 🎯 Criar objeto do método de frete selecionado para o OrderSummary
+  const selectedShippingMethod = selectedShipping
+    ? shippingMethods.find((m) => m.id === selectedShipping)
+    : null;
 
   return (
     <LayoutCheckout activeStep={1}>
@@ -364,7 +360,8 @@ const Cart = () => {
               <TooltipContent className="max-w-sm">
                 <p>
                   O desconto de 5% é aplicado automaticamente para pagamentos
-                  via PIX.
+                  via PIX sobre o valor total da compra (produtos + frete -
+                  cupons).
                 </p>
               </TooltipContent>
             </Tooltip>
@@ -415,7 +412,7 @@ const Cart = () => {
           )}
         </div>
 
-        {/* Seções: Prazo, Cupom, Resumo */}
+        {/* Seções: Prazo, Cupom, OrderSummary */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mt-8">
           {/* Prazo de entrega */}
           <div className="bg-white p-5 rounded-lg shadow-sm">
@@ -552,177 +549,25 @@ const Cart = () => {
             {couponError && (
               <p className="text-xs text-red-500 mt-1">{couponError}</p>
             )}
-
-            {/* <div className="flex items-start mt-4">
-              <Checkbox
-                id="gift"
-                checked={giftChecked}
-                onCheckedChange={setGiftChecked}
-                className="mt-1 mr-2"
-              />
-              <div>
-                <label
-                  htmlFor="gift"
-                  className="text-sm text-gray-800 cursor-pointer"
-                >
-                  Tem um vale-troca ou cartão presente?
-                </label>
-                <p className="text-xs text-gray-500 mt-1">
-                  Você poderá usá-los na etapa de pagamento.
-                </p>
-              </div>
-            </div> */}
           </div>
 
-          {/* Resumo */}
-          <div className="bg-white p-5 rounded-lg shadow-sm">
-            <div className="font-semibold mb-3">Resumo da compra</div>
-            <div className="flex flex-col gap-2 text-sm">
-              <div className="flex justify-between">
-                <span>
-                  Valor dos produtos ({cartCount}{' '}
-                  {cartCount === 1 ? 'item' : 'itens'})
-                </span>
-                <span>
-                  <FormatCurrency value={subtotal} />
-                </span>
-              </div>
-
-              {selectedShipping && (
-                <div className="flex justify-between">
-                  <span className="flex items-center">
-                    <span>
-                      Frete (
-                      {
-                        shippingMethods.find((m) => m.id === selectedShipping)
-                          ?.name
-                      }
-                      )
-                    </span>
-                    {shippingMethods.find((m) => m.id === selectedShipping)
-                      ?.isFreeShipping && (
-                      <span className="ml-2 bg-green-100 text-green-700 text-xs px-2 py-0.5 rounded-full font-medium">
-                        Grátis
-                      </span>
-                    )}
-                  </span>
-                  <span>
-                    <FormatCurrency
-                      value={
-                        shippingMethods.find((m) => m.id === selectedShipping)
-                          ?.price || 0
-                      }
-                    />
-                  </span>
-                </div>
-              )}
-
-              {!selectedShipping && (
-                <div className="flex justify-between">
-                  <span>Frete</span>
-                  <span className="text-gray-500">A calcular</span>
-                </div>
-              )}
-
-              {parseFloat(subtotal) > 0 && (
-                <div className="flex justify-between text-green-600 text-sm">
-                  <span className="flex items-center gap-1">
-                    <Check size={14} />
-                    Desconto Pix (5%)
-                  </span>
-                  <span>
-                    - <FormatCurrency value={pixDiscount} />
-                  </span>
-                </div>
-              )}
-
-              {/* Desconto do cupom, se existir */}
-              {appliedCoupon && parseFloat(couponDiscount) > 0 && (
-                <div className="flex justify-between text-blue-600 text-sm">
-                  <span className="flex items-center gap-1">
-                    <CheckIcon size={14} />
-                    Cupom {appliedCoupon.code}
-                    {appliedCoupon.discountType === 'percentage' && (
-                      <span>({appliedCoupon.discountValue}%)</span>
-                    )}
-                  </span>
-                  <span>
-                    - <FormatCurrency value={couponDiscount} />
-                  </span>
-                </div>
-              )}
-
-              <Separator className="my-2" />
-
-              <div className="flex justify-between font-bold text-base">
-                <span>Total da compra</span>
-                <span>
-                  <FormatCurrency
-                    value={
-                      parseFloat(subtotal) +
-                      (selectedShipping && parseFloat(subtotal) < 300
-                        ? shippingMethods.find((m) => m.id === selectedShipping)
-                            ?.price || 0
-                        : 0)
-                    }
-                  />
-                </span>
-              </div>
-
-              {parseFloat(subtotal) > 0 && (
-                <div className="flex justify-between text-green-600 font-medium">
-                  <span>Total com Pix</span>
-                  <span>
-                    <FormatCurrency
-                      value={
-                        totalWithDiscounts +
-                        (selectedShipping && parseFloat(subtotal) < 300
-                          ? shippingMethods.find(
-                              (m) => m.id === selectedShipping
-                            )?.price || 0
-                          : 0)
-                      }
-                    />
-                  </span>
-                </div>
-              )}
-
-              {selectedShipping &&
-                parseFloat(subtotal) >=
-                  import.meta.env.VITE_FREE_SHIPPING_PRICE && (
-                  <div className="mt-2 text-green-600 text-sm font-medium flex items-center gap-1 bg-green-50 p-2 rounded-md">
-                    <CheckIcon size={16} className="mr-1" />
-                    Você ganhou frete grátis!
-                  </div>
-                )}
-            </div>
-
-            <Button
-              className="w-full mt-6 h-12 text-base font-semibold rounded-full bg-black hover:bg-black/90"
-              onClick={handleContinue}
-              disabled={items.length === 0 || loading}
-            >
-              {loading ? (
-                <>
-                  <Loader2 size={16} className="animate-spin mr-2" />
-                  Processando
-                </>
-              ) : items.length === 0 ? (
-                'Carrinho vazio'
-              ) : (
-                'Continuar'
-              )}
-            </Button>
-
-            {items.length > 0 && (
-              <Button
-                variant="link"
-                className="w-full mt-2 text-sm"
-                onClick={() => navigate('/')}
-              >
-                Continuar comprando
-              </Button>
-            )}
+          {/* 🎯 OrderSummary */}
+          <div className="space-y-4">
+            <OrderSummary
+              items={items}
+              subtotal={subtotal}
+              shippingMethod={selectedShippingMethod}
+              appliedCoupon={appliedCoupon}
+              couponDiscount={couponDiscount}
+              calculatePixDiscount={calculatePixDiscount}
+              onContinue={handleContinue}
+              onBack={() => navigate('/')}
+              disableContinue={items.length === 0 || loading}
+              showBackButton={false}
+              showItemsList={false}
+              continueButtonText="Continuar"
+              backButtonText="Continuar comprando"
+            />
           </div>
         </div>
       </motion.div>

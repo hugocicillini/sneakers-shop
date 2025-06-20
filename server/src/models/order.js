@@ -81,13 +81,20 @@ const orderSchema = new mongoose.Schema(
     },
     paymentStatus: {
       type: String,
-      enum: ['pending', 'approved', 'rejected', 'refunded', 'cancelled'],
+      enum: [
+        'pending',
+        'processing',
+        'approved',
+        'rejected',
+        'refunded',
+        'cancelled',
+      ],
       default: 'pending',
     },
     paymentExpiresAt: {
       type: Date,
       default: function () {
-        return new Date(+new Date() + 24 * 60 * 60 * 1000); // 24 horas por padrão
+        return new Date(+new Date() + 24 * 60 * 60 * 1000); // 24 horas
       },
     },
     subtotal: {
@@ -119,14 +126,13 @@ const orderSchema = new mongoose.Schema(
       type: String,
       required: true,
       enum: [
-        'pending', // Recebido
-        'payment', // Pagamento
-        'processing', // Separação
-        'awaiting_shipment', // Aguardando Transporte
-        'in_transit', // Em Transporte
-        'delivered', // Entregue
-        'cancelled', // Cancelado
-        'failed', // Falha
+        'pending',
+        'confirmed',
+        'processing',
+        'shipped',
+        'delivered',
+        'cancelled',
+        'returned',
       ],
       default: 'pending',
     },
@@ -136,13 +142,12 @@ const orderSchema = new mongoose.Schema(
           type: String,
           enum: [
             'pending',
-            'payment',
+            'confirmed',
             'processing',
-            'awaiting_shipment',
-            'in_transit',
+            'shipped',
             'delivered',
             'cancelled',
-            'failed',
+            'returned',
           ],
         },
         date: {
@@ -161,25 +166,21 @@ const orderSchema = new mongoose.Schema(
       default: null,
       index: true,
     },
-    preferenceId: String, // Para Mercado Pago
+    preferenceId: String,
   },
   {
     timestamps: true,
   }
 );
 
-// Método para calcular o total do pedido
 orderSchema.pre('save', function (next) {
-  // Calcular subtotal com base nos items
   this.subtotal = this.items.reduce(
     (acc, item) => acc + item.price * item.quantity,
     0
   );
 
-  // Calcular total incluindo frete e descontos
   this.total = this.subtotal + this.shipping.cost - this.discountAmount;
 
-  // Adicionar ao histórico de status se o status foi alterado
   if (this.isModified('status')) {
     this.statusHistory.push({
       status: this.status,

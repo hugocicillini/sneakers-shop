@@ -20,7 +20,7 @@ const ToggleFavorite = ({ sneaker }) => {
       await toggleWishlistItem(sneaker._id);
     }
   };
-  
+
   return (
     <button
       onClick={handleToggleFavorite}

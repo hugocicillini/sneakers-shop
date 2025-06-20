@@ -10,11 +10,9 @@ import { authMiddleware } from '../middlewares/authMiddleware.js';
 
 const router = express.Router();
 
-// Rotas públicas
 router.post('/register', registerUser);
 router.post('/login', loginUser);
 
-// Rotas protegidas
 router.get('/', authMiddleware, getUser);
 router.put('/', authMiddleware, updateUser);
 router.put('/change-password', authMiddleware, changePassword);

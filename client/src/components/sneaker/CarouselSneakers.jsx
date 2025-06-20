@@ -20,7 +20,6 @@ const CarouselSneakers = ({
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [scrollSnaps, setScrollSnaps] = useState([]);
 
-  // Configuração do carrossel Embla com opções específicas
   const [emblaRef, emblaApi] = useEmblaCarousel({
     align: 'start',
     containScroll: 'trimSnaps',
@@ -33,7 +32,6 @@ const CarouselSneakers = ({
     loop: false,
   });
 
-  // Função para formatar preços
   const formatPrice = (value) => {
     return new Intl.NumberFormat('pt-BR', {
       minimumFractionDigits: 2,
@@ -41,7 +39,6 @@ const CarouselSneakers = ({
     }).format(value);
   };
 
-  // Funções de navegação do carrossel
   const scrollPrev = useCallback(() => emblaApi?.scrollPrev(), [emblaApi]);
   const scrollNext = useCallback(() => emblaApi?.scrollNext(), [emblaApi]);
   const scrollTo = useCallback(
@@ -49,7 +46,6 @@ const CarouselSneakers = ({
     [emblaApi]
   );
 
-  // Atualiza o estado com base na posição do carrossel
   const onSelect = useCallback(() => {
     if (!emblaApi) return;
 
@@ -58,14 +54,11 @@ const CarouselSneakers = ({
     setSelectedIndex(emblaApi.selectedScrollSnap());
   }, [emblaApi]);
 
-  // Inicializa o carrossel e configura os listeners
   useEffect(() => {
     if (!emblaApi) return;
 
-    // Captura todos os pontos de parada do carrossel
     setScrollSnaps(emblaApi.scrollSnapList());
 
-    // Configura os listeners para eventos do carrossel
     emblaApi.on('select', onSelect);
     onSelect();
 
@@ -74,7 +67,6 @@ const CarouselSneakers = ({
     };
   }, [emblaApi, onSelect]);
 
-  // Carrega os dados dos tênis
   useEffect(() => {
     const areOnlyIds = sneakers.length > 0 && typeof sneakers[0] === 'string';
 
@@ -109,7 +101,6 @@ const CarouselSneakers = ({
     }
   }, [sneakers]);
 
-  // Renderização condicional para estados de carregamento
   if (loading) {
     return <div className="py-8 text-center">Carregando tênis...</div>;
   }
@@ -156,7 +147,11 @@ const CarouselSneakers = ({
                 key={sneaker._id}
                 className="flex-shrink-0 pl-0 pr-4 pb-6 w-[85%] sm:w-[45%] md:w-[calc(100%/3)] lg:w-[25%] xl:w-[20%] min-w-0"
               >
-                <Link to={`/sneaker/${sneaker.slug}`}>
+                <Link
+                  to={`/sneaker/${
+                    sneaker.slug
+                  }?color=${sneaker.defaultColor.toLowerCase()}`}
+                >
                   <Card className="h-full overflow-hidden hover:shadow-lg transition-all duration-300 border border-gray-100 group">
                     <div className="relative h-[200px] overflow-hidden bg-gray-50">
                       <img

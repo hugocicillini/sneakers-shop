@@ -1,12 +1,10 @@
 import Wishlist from '../models/wishlist.js';
 import logger from '../utils/logger.js';
 
-// Obter a wishlist do usuário logado
 export const getUserWishlist = async (req, res, next) => {
   try {
-    const userId = req.user._id; // Usando ID do usuário autenticado
+    const userId = req.user._id;
 
-    // Buscar wishlist existente ou retornar uma vazia
     let wishlist = await Wishlist.findOne({ user: userId })
       .populate({
         path: 'sneakers.sneaker',
@@ -43,10 +41,9 @@ export const getUserWishlist = async (req, res, next) => {
   }
 };
 
-// Adicionar um tênis à wishlist
 export const addToWishlist = async (req, res, next) => {
   try {
-    const userId = req.user._id; // ID do usuário autenticado
+    const userId = req.user._id;
     const { sneakerId } = req.body;
 
     if (!sneakerId) {
@@ -56,11 +53,9 @@ export const addToWishlist = async (req, res, next) => {
       });
     }
 
-    // Verificar se já existe uma wishlist para o usuário
     let wishlist = await Wishlist.findOne({ user: userId });
 
     if (!wishlist) {
-      // Criar nova wishlist
       wishlist = new Wishlist({
         user: userId,
         sneakers: [{ sneaker: sneakerId }],
@@ -68,14 +63,12 @@ export const addToWishlist = async (req, res, next) => {
       await wishlist.save();
       logger.info(`Nova wishlist criada para usuário ${userId}`);
     } else {
-      // Adicionar à wishlist existente usando o método do modelo
       await wishlist.addSneaker(sneakerId);
       logger.info(
         `Tênis ${sneakerId} adicionado à wishlist do usuário ${userId}`
       );
     }
 
-    // Retornar wishlist populada
     wishlist = await Wishlist.findOne({ user: userId }).populate(
       'sneakers.sneaker'
     );
@@ -91,13 +84,11 @@ export const addToWishlist = async (req, res, next) => {
   }
 };
 
-// Remover um tênis da wishlist
 export const removeFromWishlist = async (req, res, next) => {
   try {
     const userId = req.user._id;
     const { sneakerId } = req.params;
 
-    // Buscar wishlist
     const wishlist = await Wishlist.findOne({ user: userId });
 
     if (!wishlist) {
@@ -107,7 +98,6 @@ export const removeFromWishlist = async (req, res, next) => {
       });
     }
 
-    // Usar o método do modelo para remover
     await wishlist.removeSneaker(sneakerId);
     logger.info(`Tênis ${sneakerId} removido da wishlist do usuário ${userId}`);
 
@@ -121,12 +111,10 @@ export const removeFromWishlist = async (req, res, next) => {
   }
 };
 
-// Limpar a wishlist inteira
 export const clearWishlist = async (req, res, next) => {
   try {
     const userId = req.user._id;
 
-    // Buscar e atualizar a wishlist
     const wishlist = await Wishlist.findOne({ user: userId });
 
     if (!wishlist) {

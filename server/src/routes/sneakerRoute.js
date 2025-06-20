@@ -12,12 +12,10 @@ import { authMiddleware } from '../middlewares/authMiddleware.js';
 
 const router = express.Router();
 
-// Rotas públicas
 router.get('/', getSneakers);
 router.get('/:slug', getSneakerBySlug);
 router.get('/:sneakerId/variants', getSneakerVariants);
 
-// Rotas protegidas
 router.post('/', authMiddleware, createSneaker);
 router.put('/:sneakerId', authMiddleware, updateSneaker);
 router.delete('/:sneakerId', authMiddleware, deleteSneaker);

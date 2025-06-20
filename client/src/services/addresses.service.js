@@ -1,11 +1,10 @@
+import { getAuthHeaders } from '@/lib/utils';
+
 export const getUserAddresses = async () => {
   try {
     const response = await fetch(`${import.meta.env.VITE_API_URL}/addresses`, {
       method: 'GET',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${localStorage.getItem('token')}`,
-      },
+      headers: getAuthHeaders(),
     });
 
     if (!response.ok) {
@@ -33,10 +32,7 @@ export const updateUserAddress = async (addressId, addressData) => {
       `${import.meta.env.VITE_API_URL}/addresses/${addressId}`,
       {
         method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${localStorage.getItem('token')}`,
-        },
+        headers: getAuthHeaders(),
         body: JSON.stringify(addressData),
       }
     );
@@ -60,14 +56,11 @@ export const updateUserAddress = async (addressId, addressData) => {
   }
 };
 
-export const createAddress = async (addressData) => {
+export const createUserAddress = async (addressData) => {
   try {
     const response = await fetch(`${import.meta.env.VITE_API_URL}/addresses`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${localStorage.getItem('token')}`,
-      },
+      headers: getAuthHeaders(),
       body: JSON.stringify(addressData),
     });
 
@@ -96,10 +89,7 @@ export const deleteUserAddress = async (addressId) => {
       `${import.meta.env.VITE_API_URL}/addresses/${addressId}`,
       {
         method: 'DELETE',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${localStorage.getItem('token')}`,
-        },
+        headers: getAuthHeaders(),
       }
     );
 

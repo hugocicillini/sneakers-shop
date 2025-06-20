@@ -23,14 +23,12 @@ const categorySchema = new mongoose.Schema(
   }
 );
 
-// Virtual para acessar sneakers desta categoria
 categorySchema.virtual('sneakers', {
   ref: 'Sneaker',
   localField: '_id',
   foreignField: 'category',
 });
 
-// Pre-save hook para gerar slug automaticamente
 categorySchema.pre('save', function (next) {
   if (!this.slug || this.isModified('name')) {
     this.slug = this.name
@@ -43,7 +41,6 @@ categorySchema.pre('save', function (next) {
   next();
 });
 
-// Índice para performance em buscas por nome
 categorySchema.index({ name: 'text' });
 categorySchema.index({ isActive: 1 });
 

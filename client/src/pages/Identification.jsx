@@ -6,88 +6,17 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useCart } from '@/contexts/CartContext';
 import { toast } from '@/hooks/use-toast';
 import LayoutCheckout from '@/layout/LayoutCheckout';
-import { createAddress, updateUserAddress } from '@/services/addresses.service';
+import {
+  createUserAddress,
+  updateUserAddress,
+} from '@/services/addresses.service';
 import { getUser, updateUser } from '@/services/users.service';
 import { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
-// Hook para gerenciar perfil do usuário
-const useUserProfile = (setUser) => {
-  const [userData, setUserData] = useState(null);
-  const [formattedUserData, setFormattedUserData] = useState(null);
-
-  // Formatar dados para o perfil
-  const formatUserDataForProfile = useCallback((userData) => {
-    return {
-      data: {
-        name: userData?.name || '',
-        email: userData?.email || '',
-        phone: userData?.phone || '',
-      },
-    };
-  }, []);
-
-  // Atualizar dados do usuário no estado
-  const updateUserState = useCallback(
-    (userData) => {
-      setUserData(userData);
-      setFormattedUserData(formatUserDataForProfile(userData));
-    },
-    [formatUserDataForProfile]
-  );
-
-  // Processar atualização de perfil
-  const handleUserUpdate = async (updatedUserData) => {
-    try {
-      const response = await updateUser(updatedUserData);
-      if (response.success) {
-        const userData = response.data || response.user?.data || response.user;
-        updateUserState(userData);
-
-        // Atualizar contexto global
-        setUser((prevUser) => ({
-          ...prevUser,
-          ...userData,
-        }));
-
-        toast({
-          title: 'Perfil atualizado',
-          description: 'Suas informações foram atualizadas com sucesso!',
-        });
-        return true;
-      } else {
-        toast({
-          title: 'Erro ao atualizar perfil',
-          description:
-            response.message || 'Não foi possível atualizar seu perfil.',
-          variant: 'destructive',
-        });
-      }
-    } catch (error) {
-      console.error('Erro ao atualizar perfil:', error);
-      toast({
-        title: 'Erro inesperado',
-        description: 'Ocorreu um erro ao processar sua solicitação.',
-        variant: 'destructive',
-      });
-    }
-    return false;
-  };
-
-  return {
-    userData,
-    formattedUserData,
-    updateUserState,
-    handleUserUpdate,
-    formatUserDataForProfile,
-  };
-};
-
-// Hook para gerenciar endereços
-const useAddressManagement = (formatUserDataForProfile) => {
+const useAddressManagement = () => {
   const [address, setAddress] = useState(null);
 
-  // Extrair informações de endereço da resposta da API
   const processUserData = useCallback((response) => {
     if (!response.success) {
       toast({
@@ -100,7 +29,6 @@ const useAddressManagement = (formatUserDataForProfile) => {
 
     const userData = response.data || response.user?.data || response.user;
 
-    // Determinar o endereço a ser usado
     if (userData.defaultAddress) {
       setAddress(userData.defaultAddress);
     } else if (userData.addresses?.length > 0) {
@@ -120,17 +48,19 @@ const useAddressManagement = (formatUserDataForProfile) => {
   };
 };
 
-// Hook para gerenciar métodos de envio
-const useShippingMethods = (navigate, subtotal) => {
+const useShippingMethods = (navigate, subtotal, couponDiscount) => {
   const [selectedShippingOption, setSelectedShippingOption] =
     useState('normal');
   const [shippingMethods, setShippingMethods] = useState([]);
 
-  // Definir os métodos de envio com base no valor da compra
   useEffect(() => {
-    const parsedSubtotal = parseFloat(subtotal);
+    const subtotalValue = parseFloat(subtotal) || 0;
+    const couponValue = parseFloat(couponDiscount) || 0;
+    const totalWithCoupon = subtotalValue - couponValue;
+
     const isFreeShipping =
-      parsedSubtotal >= import.meta.env.VITE_FREE_SHIPPING_PRICE;
+      totalWithCoupon >=
+      parseFloat(import.meta.env.VITE_FREE_SHIPPING_PRICE || 300);
 
     setShippingMethods([
       {
@@ -152,7 +82,7 @@ const useShippingMethods = (navigate, subtotal) => {
         isFreeShipping: false,
       },
     ]);
-  }, [subtotal]);
+  }, [subtotal, couponDiscount]);
 
   const handleShippingMethodChange = useCallback((value) => {
     setSelectedShippingOption(value);
@@ -194,37 +124,116 @@ const useShippingMethods = (navigate, subtotal) => {
   };
 };
 
-// Componente principal
 const Identification = () => {
   const { user, isAuthenticated, setUser } = useAuth();
-  const { items, subtotal, totalWithDiscounts } = useCart();
+  const {
+    items,
+    subtotal,
+    totalWithDiscounts,
+    appliedCoupon,
+    couponDiscount,
+    calculatePixDiscount,
+  } = useCart();
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
+  const [userData, setUserData] = useState(null);
+  const [formattedUserData, setFormattedUserData] = useState(null);
 
-  // Inicializar hooks personalizados
-  const {
-    userData,
-    formattedUserData,
-    updateUserState,
-    handleUserUpdate,
-    formatUserDataForProfile,
-  } = useUserProfile(setUser);
-  const { address, processUserData } = useAddressManagement(
-    formatUserDataForProfile
-  );
+  const { address, processUserData } = useAddressManagement();
+
   const {
     selectedShippingOption,
     shippingMethods,
     handleShippingMethodChange,
     handleContinue,
-  } = useShippingMethods(navigate, subtotal);
+  } = useShippingMethods(navigate, subtotal, couponDiscount);
 
-  // Buscar dados do usuário e endereço
+  const formatUserDataForProfile = useCallback((userData) => {
+    return {
+      data: {
+        name: userData?.name || '',
+        email: userData?.email || '',
+        phone: userData?.phone || '',
+      },
+    };
+  }, []);
+
+  const handleUserUpdate = async (updatedUserData) => {
+    try {
+      const response = await updateUser(updatedUserData);
+
+      if (response.success) {
+        const newUserData =
+          response.data || response.user?.data || response.user;
+
+        setUserData(newUserData);
+        setFormattedUserData(formatUserDataForProfile(newUserData));
+
+        setUser((prevUser) => {
+          const updatedUser = {
+            ...prevUser,
+            user: {
+              ...prevUser.user,
+              ...newUserData,
+            },
+          };
+
+          try {
+            localStorage.setItem('user', JSON.stringify(updatedUser));
+            console.log('✅ LocalStorage atualizado:', updatedUser);
+          } catch (error) {
+            console.error('❌ Erro ao atualizar localStorage:', error);
+          }
+
+          return updatedUser;
+        });
+
+        toast({
+          title: 'Perfil atualizado',
+          description: 'Suas informações foram atualizadas com sucesso!',
+        });
+
+        return true;
+      } else {
+        toast({
+          title: 'Erro ao atualizar perfil',
+          description:
+            response.message || 'Não foi possível atualizar seu perfil.',
+          variant: 'destructive',
+        });
+        return false;
+      }
+    } catch (error) {
+      console.error('Erro ao atualizar perfil:', error);
+      toast({
+        title: 'Erro inesperado',
+        description: 'Ocorreu um erro ao processar sua solicitação.',
+        variant: 'destructive',
+      });
+      return false;
+    }
+  };
+
   useEffect(() => {
     if (!isAuthenticated) {
       navigate('/login?redirect=/checkout/identification');
       return;
     }
+
+    if (!items || items.length === 0) {
+      navigate('/checkout/cart');
+      return;
+    }
+
+    const allowIdentification = sessionStorage.getItem('allowIdentification');
+    if (!allowIdentification) {
+      navigate('/checkout/cart');
+      return;
+    }
+  }, [isAuthenticated, items, navigate]);
+
+  useEffect(() => {
+    if (!isAuthenticated) return;
 
     const fetchUserData = async () => {
       setLoading(true);
@@ -232,7 +241,8 @@ const Identification = () => {
         const response = await getUser();
         const userData = processUserData(response);
         if (userData) {
-          updateUserState(userData);
+          setUserData(userData);
+          setFormattedUserData(formatUserDataForProfile(userData));
         }
       } catch (error) {
         console.error('Erro ao obter dados do usuário:', error);
@@ -247,25 +257,23 @@ const Identification = () => {
     };
 
     fetchUserData();
-  }, [isAuthenticated, navigate, user, processUserData, updateUserState]);
+  }, [isAuthenticated, processUserData, formatUserDataForProfile]);
 
-  // Função para atualizar endereço
   const handleAddressUpdated = async (addressId, addressData) => {
     setLoading(true);
     try {
-      // Executar a operação de criação ou atualização
       const operation = addressId
         ? updateUserAddress(addressId, addressData)
-        : createAddress(addressData);
+        : createUserAddress(addressData);
 
       const response = await operation;
 
       if (response.success) {
-        // Recarregar dados atualizados
         const userResponse = await getUser();
         const userData = processUserData(userResponse);
         if (userData) {
-          updateUserState(userData);
+          setUserData(userData);
+          setFormattedUserData(formatUserDataForProfile(userData));
         }
 
         toast({
@@ -320,6 +328,7 @@ const Identification = () => {
               selectedValue={selectedShippingOption}
               onChange={handleShippingMethodChange}
               subtotal={subtotal}
+              couponDiscount={couponDiscount}
             />
 
             <AddressCard
@@ -337,6 +346,9 @@ const Identification = () => {
               subtotal={subtotal}
               totalWithDiscounts={totalWithDiscounts}
               shippingMethod={selectedShippingMethod}
+              appliedCoupon={appliedCoupon}
+              couponDiscount={couponDiscount}
+              calculatePixDiscount={calculatePixDiscount}
               onContinue={() => handleContinue(address)}
               onBack={() => navigate('/checkout/cart')}
               disableContinue={!address || loading}

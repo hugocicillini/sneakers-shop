@@ -35,18 +35,15 @@ const reviewSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-// Índices para melhorar consultas comuns
 reviewSchema.index({ sneaker: 1, date: -1 });
 reviewSchema.index({ user: 1, sneaker: 1 });
 
-// Middleware para atualizar rating do produto
 reviewSchema.post('save', async function () {
   try {
     const Sneaker = mongoose.model('Sneaker');
     const sneaker = await Sneaker.findById(this.sneaker);
 
     if (sneaker) {
-      // Corrigido para usar o método que realmente existe
       await sneaker.updateRatingInfo();
       await sneaker.save();
     }
@@ -55,7 +52,6 @@ reviewSchema.post('save', async function () {
   }
 });
 
-// Também atualizar ratings ao excluir uma review
 reviewSchema.post('remove', async function () {
   try {
     const Sneaker = mongoose.model('Sneaker');

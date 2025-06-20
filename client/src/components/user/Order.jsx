@@ -2,7 +2,6 @@ import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { toast } from '@/hooks/use-toast';
 import {
   AlertCircle,
-  ArrowRight,
   CheckCircle2,
   ChevronDown,
   ChevronUp,
@@ -11,60 +10,55 @@ import {
   Download,
   ExternalLink,
   Eye,
+  Loader2,
   MapPin,
   Package,
   QrCode,
   Receipt,
   Repeat,
+  RotateCcw,
   Star,
   Ticket,
   Truck,
   XCircle,
 } from 'lucide-react';
 import { useState } from 'react';
+import { Button } from '../ui/button';
 
 const statusMap = {
   pending: {
-    label: 'Pedido Recebido',
-    color: 'bg-blue-100 text-blue-800',
+    label: 'Aguardando Pagamento',
+    color: 'bg-yellow-100 text-yellow-800',
     step: 1,
-    icon: <Clock size={16} className="text-blue-600" />,
+    icon: <Clock size={16} className="text-yellow-600" />,
     description:
-      'Seu pedido foi recebido e está aguardando confirmação de pagamento.',
+      'Aguardando confirmação do pagamento para processar seu pedido.',
   },
-  payment_approved: {
-    label: 'Pagamento Aprovado',
+  confirmed: {
+    label: 'Pagamento Confirmado',
     color: 'bg-green-100 text-green-800',
     step: 2,
     icon: <CheckCircle2 size={16} className="text-green-600" />,
-    description: 'Pagamento confirmado! Seu pedido está sendo preparado.',
+    description: 'Pagamento aprovado! Preparando seu pedido para envio.',
   },
-  separating: {
-    label: 'Em Separação',
-    color: 'bg-yellow-100 text-yellow-800',
+  processing: {
+    label: 'Preparando Envio',
+    color: 'bg-blue-100 text-blue-800',
     step: 3,
-    icon: <Package size={16} className="text-yellow-600" />,
-    description: 'Estamos separando seus produtos para envio.',
+    icon: <Package size={16} className="text-blue-600" />,
+    description: 'Seus produtos estão sendo separados e embalados.',
   },
-  shipping: {
-    label: 'Aguardando Transporte',
-    color: 'bg-orange-100 text-orange-800',
-    step: 4,
-    icon: <Truck size={16} className="text-orange-600" />,
-    description:
-      'Seu pedido está pronto e aguardando coleta pela transportadora.',
-  },
-  in_transit: {
-    label: 'Em Transporte',
+  shipped: {
+    label: 'Enviado',
     color: 'bg-purple-100 text-purple-800',
-    step: 5,
-    icon: <ArrowRight size={16} className="text-purple-600" />,
-    description: 'Seu pedido está a caminho do endereço de entrega.',
+    step: 4,
+    icon: <Truck size={16} className="text-purple-600" />,
+    description: 'Seu pedido foi enviado e está a caminho.',
   },
   delivered: {
     label: 'Entregue',
     color: 'bg-green-200 text-green-900',
-    step: 6,
+    step: 5,
     icon: <CheckCircle2 size={16} className="text-green-700" />,
     description: 'Pedido entregue com sucesso!',
   },
@@ -75,30 +69,55 @@ const statusMap = {
     icon: <XCircle size={16} className="text-red-600" />,
     description: 'Este pedido foi cancelado.',
   },
-  rejected: {
-    label: 'Rejeitado',
-    color: 'bg-red-100 text-red-800',
+  returned: {
+    label: 'Devolvido',
+    color: 'bg-gray-100 text-gray-800',
     step: 0,
-    icon: <XCircle size={16} className="text-red-600" />,
-    description: 'Este pedido foi rejeitado.',
-  },
-  processing: {
-    label: 'Processando',
-    color: 'bg-yellow-100 text-yellow-800',
-    step: 0,
-    icon: <Clock size={16} className="text-yellow-600" />,
-    description: 'Seu pedido está sendo processado.',
+    icon: <RotateCcw size={16} className="text-gray-600" />,
+    description: 'Produto devolvido conforme solicitado.',
   },
 };
 
 const statusSteps = [
-  { key: 'pending', label: 'Recebido', icon: Clock },
-  { key: 'payment_approved', label: 'Pagamento', icon: CheckCircle2 },
-  { key: 'separating', label: 'Separação', icon: Package },
-  { key: 'shipping', label: 'Aguardando Transporte', icon: Truck },
-  { key: 'in_transit', label: 'Em Transporte', icon: ArrowRight },
+  { key: 'pending', label: 'Pagamento', icon: Clock },
+  { key: 'confirmed', label: 'Confirmado', icon: CheckCircle2 },
+  { key: 'processing', label: 'Preparando', icon: Package },
+  { key: 'shipped', label: 'Enviado', icon: Truck },
   { key: 'delivered', label: 'Entregue', icon: CheckCircle2 },
 ];
+
+const paymentStatusMap = {
+  pending: {
+    label: 'Aguardando',
+    color: 'bg-yellow-100 text-yellow-800',
+    icon: <Clock size={16} />,
+  },
+  processing: {
+    label: 'Processando',
+    color: 'bg-blue-100 text-blue-800',
+    icon: <Loader2 size={16} className="animate-spin" />,
+  },
+  approved: {
+    label: 'Aprovado',
+    color: 'bg-green-100 text-green-800',
+    icon: <CheckCircle2 size={16} />,
+  },
+  rejected: {
+    label: 'Rejeitado',
+    color: 'bg-red-100 text-red-800',
+    icon: <XCircle size={16} />,
+  },
+  refunded: {
+    label: 'Estornado',
+    color: 'bg-orange-100 text-orange-800',
+    icon: <RotateCcw size={16} />,
+  },
+  cancelled: {
+    label: 'Cancelado',
+    color: 'bg-gray-100 text-gray-800',
+    icon: <XCircle size={16} />,
+  },
+};
 
 const paymentIcons = {
   pix: <QrCode className="text-green-600" size={14} />,
@@ -130,12 +149,9 @@ const OrderList = ({ orders }) => {
           Parece que você ainda não fez nenhum pedido. Que tal dar uma olhada em
           nossa coleção?
         </p>{' '}
-        <button
-          className="mt-4 px-6 py-3 bg-primary text-primary-foreground rounded-lg font-semibold hover:bg-primary/90 transition-all"
-          onClick={() => (window.location.href = '/products')}
-        >
+        <Button onClick={() => (window.location.href = '/')}>
           Explorar Produtos
-        </button>
+        </Button>
       </div>
     );
   }
@@ -151,7 +167,13 @@ const OrderList = ({ orders }) => {
         if (order.paymentDetails?.method?.includes('pix')) paymentType = 'pix';
         if (
           order.paymentDetails?.method?.includes('boleto') ||
-          order.paymentDetails?.method?.includes('ticket')
+          order.paymentDetails?.method?.includes('ticket') ||
+          order.paymentDetails?.method?.includes('bolbradesco') ||
+          order.paymentDetails?.method?.includes('boletobancario') ||
+          order.paymentDetails?.method?.includes('pec') ||
+          order.paymentDetails?.method?.includes('paguefacil') ||
+          order.paymentDetails?.method?.includes('rapipago') ||
+          order.paymentDetails?.method?.includes('redlink')
         )
           paymentType = 'boleto';
 
@@ -216,28 +238,14 @@ const OrderList = ({ orders }) => {
             {expandedOrders[order._id] && order.status !== 'cancelled' && (
               <>
                 <CardContent className="px-8 py-6 bg-gray-50">
-                  {/* Status Progress Bar Premium */}{' '}
+                  {/* Status Progress Bar Premium */}
                   <div className="mb-6">
                     <h4 className="text-base font-semibold text-gray-900 mb-4 flex items-center gap-2">
                       <Package size={18} className="text-gray-600" />
                       Acompanhe seu pedido
                     </h4>
                     <div className="relative py-2">
-                      {/* Linha de fundo (cinza) */}
-                      <div className="absolute left-0 right-0 top-[24px] h-0.5 bg-gray-200 z-0" />
-                      {/* Linha de progresso (preta/primária) */}
-                      <div
-                        className="absolute top-[24px] h-0.5 bg-primary z-10 rounded-full transition-all duration-500 ease-out"
-                        style={{
-                          left: '0%',
-                          right: `${
-                            100 -
-                            (((statusMap[order.status]?.step || 1) - 1) /
-                              (statusSteps.length - 1)) *
-                              100
-                          }%`,
-                        }}
-                      />
+                      {/* Container dos círculos para calcular posições */}
                       <div className="flex items-center justify-between mb-2 gap-0 relative z-20">
                         {statusSteps.map((step, idx) => {
                           const currentStep =
@@ -245,20 +253,31 @@ const OrderList = ({ orders }) => {
                           const isActive = idx + 1 <= currentStep;
                           const isCompleted = idx + 1 < currentStep;
                           const IconComponent = step.icon;
+
                           return (
                             <div
                               key={step.key}
-                              className="flex flex-col items-center flex-1 min-w-0"
+                              className="flex flex-col items-center flex-1 min-w-0 relative"
                             >
+                              {/* Linha de fundo (só nos que não são o último) */}
+                              {idx < statusSteps.length - 1 && (
+                                <div className="absolute left-1/2 top-[18px] w-full h-0.5 bg-gray-200 z-0" />
+                              )}
+
+                              {/* Linha de progresso (só nos ativos e não é o último) */}
+                              {idx < currentStep - 1 &&
+                                idx < statusSteps.length - 1 && (
+                                  <div className="absolute left-1/2 top-[18px] w-full h-0.5 bg-primary z-10 transition-all duration-500" />
+                                )}
+
                               <div
-                                className={`flex items-center justify-center w-9 h-9 rounded-full border transition-all mb-1 mx-auto ${
+                                className={`flex items-center justify-center w-9 h-9 rounded-full border transition-all mb-1 mx-auto relative z-20 ${
                                   isCompleted
                                     ? 'bg-green-500 text-white border-green-500'
                                     : isActive
                                     ? 'bg-primary text-primary-foreground border-primary'
                                     : 'bg-white text-gray-400 border-gray-200'
                                 }`}
-                                style={{ zIndex: 2 }}
                               >
                                 {isCompleted ? (
                                   <CheckCircle2 size={15} />
@@ -279,6 +298,7 @@ const OrderList = ({ orders }) => {
                         })}
                       </div>
                     </div>
+
                     <div className="mt-4 p-3 bg-gray-50 rounded-lg border border-gray-200">
                       <p className="text-xs text-gray-700 text-center">
                         {statusMap[order.status]?.description ||
@@ -375,8 +395,8 @@ const OrderList = ({ orders }) => {
                         {['pending', 'payment_approved'].includes(
                           order.status
                         ) && (
-                          <button
-                            className="px-4 py-2 rounded-lg border border-blue-300 text-blue-700 font-medium text-sm hover:bg-blue-50 transition-all flex items-center gap-2"
+                          <Button
+                            variant="outline"
                             onClick={() =>
                               toast({
                                 title: 'Funcionalidade em desenvolvimento',
@@ -388,10 +408,10 @@ const OrderList = ({ orders }) => {
                           >
                             <MapPin size={16} />
                             Alterar Endereço
-                          </button>
+                          </Button>
                         )}
-                        <button
-                          className="px-4 py-2 rounded-lg border border-gray-300 text-gray-700 font-medium text-sm hover:bg-gray-50 transition-all flex items-center gap-2"
+                        <Button
+                          variant="outline"
                           onClick={() =>
                             toast({
                               title: 'Código de rastreamento',
@@ -403,7 +423,7 @@ const OrderList = ({ orders }) => {
                         >
                           <Eye size={16} />
                           Rastrear
-                        </button>
+                        </Button>
                       </div>
                     </div>
                     {/* Payment Card Premium */}{' '}
@@ -430,7 +450,7 @@ const OrderList = ({ orders }) => {
                                 : 'text-red-700 bg-red-100'
                             }`}
                           >
-                            {statusMap[order.paymentStatus]?.label ||
+                            {paymentStatusMap[order.paymentStatus]?.label ||
                               order.paymentStatus}
                           </span>
                         </div>
@@ -480,8 +500,8 @@ const OrderList = ({ orders }) => {
                               Baixar Boleto
                             </a>
                           )}
-                        <button
-                          className="px-4 py-2 rounded-lg border border-gray-300 text-gray-700 font-medium text-sm hover:bg-gray-50 transition-all flex items-center gap-2"
+                        <Button
+                          variant="outline"
                           onClick={() =>
                             toast({
                               title: 'Nota fiscal',
@@ -493,15 +513,15 @@ const OrderList = ({ orders }) => {
                         >
                           <Receipt size={16} />
                           Nota Fiscal
-                        </button>
+                        </Button>
                       </div>
                     </div>
                   </div>
                   {/* Action Buttons Premium */}{' '}
                   <div className="mt-8 flex flex-wrap gap-3 justify-center">
                     {['pending', 'payment_approved'].includes(order.status) && (
-                      <button
-                        className="px-4 py-2 rounded-lg border border-red-300 text-red-600 text-sm font-medium hover:bg-red-50 transition-all flex items-center gap-2"
+                      <Button
+                        variant="destructive"
                         onClick={() =>
                           toast({
                             title: 'Solicitação de cancelamento enviada',
@@ -513,10 +533,10 @@ const OrderList = ({ orders }) => {
                       >
                         <XCircle size={16} />
                         Solicitar Cancelamento
-                      </button>
+                      </Button>
                     )}
-                    <button
-                      className="px-4 py-2 rounded-lg border border-blue-300 text-blue-600 text-sm font-medium hover:bg-blue-50 transition-all flex items-center gap-2"
+                    <Button
+                      variant="outline"
                       onClick={() =>
                         toast({
                           title: 'Suporte ao cliente',
@@ -528,10 +548,10 @@ const OrderList = ({ orders }) => {
                     >
                       <ExternalLink size={16} />
                       Falar com Suporte
-                    </button>{' '}
+                    </Button>{' '}
                     {order.status === 'delivered' && (
-                      <button
-                        className="px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-all flex items-center gap-2"
+                      <Button
+                        variant="outline"
                         onClick={() =>
                           toast({
                             title: 'Obrigado!',
@@ -543,12 +563,12 @@ const OrderList = ({ orders }) => {
                       >
                         <Star size={16} />
                         Avaliar Produtos
-                      </button>
+                      </Button>
                     )}
                   </div>
                 </CardContent>
               </>
-            )}{' '}
+            )}
             {/* Cancelled Order Section */}
             {order.status === 'cancelled' && expandedOrders[order._id] && (
               <CardContent className="px-8 py-6 bg-red-50">
@@ -603,8 +623,8 @@ const OrderList = ({ orders }) => {
                 </div>{' '}
                 {/* Reorder button */}
                 <div className="mt-6 text-center">
-                  <button
-                    className="px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-all flex items-center gap-2 mx-auto"
+                  <Button
+                    variant="outline"
                     onClick={() =>
                       toast({
                         title: 'Redirecionando...',
@@ -616,7 +636,7 @@ const OrderList = ({ orders }) => {
                   >
                     <Repeat size={16} />
                     Refazer Pedido
-                  </button>
+                  </Button>
                 </div>
               </CardContent>
             )}

@@ -1,7 +1,6 @@
 import { Link } from 'react-router-dom';
 
 const LayoutCheckout = ({ children, activeStep }) => {
-  // Define as etapas do checkout
   const steps = [
     { number: 1, name: 'Carrinho', path: '/checkout/cart' },
     { number: 2, name: 'Identificação', path: '/checkout/identification' },
@@ -39,7 +38,6 @@ const LayoutCheckout = ({ children, activeStep }) => {
               className="flex-1 flex flex-col items-center relative z-10"
             >
               {activeStep >= step.number ? (
-                // Se é etapa atual ou anterior, permite navegação
                 <Link
                   to={step.path}
                   className={`w-8 h-8 rounded-full flex items-center justify-center font-bold
@@ -48,7 +46,6 @@ const LayoutCheckout = ({ children, activeStep }) => {
                   {step.number}
                 </Link>
               ) : (
-                // Se é etapa futura, desativa a navegação
                 <div
                   className="w-8 h-8 rounded-full flex items-center justify-center font-bold
                     bg-gray-200 text-gray-500 cursor-default"
@@ -79,11 +76,6 @@ const LayoutCheckout = ({ children, activeStep }) => {
         <img
           src="https://img.icons8.com/color/48/000000/mastercard.png"
           alt="Mastercard"
-          className="h-10 w-auto"
-        />
-        <img
-          src="https://img.icons8.com/color/48/000000/paypal.png"
-          alt="PayPal"
           className="h-10 w-auto"
         />
         <img

@@ -1,7 +1,6 @@
 import mongoose from 'mongoose';
 import { User } from './user.js';
 
-// Schema específico para administradores
 const adminSchema = new mongoose.Schema({
   role: {
     type: String,
@@ -38,7 +37,6 @@ const adminSchema = new mongoose.Schema({
   lastPasswordChange: Date,
 });
 
-// Método para verificar se o admin tem permissão específica
 adminSchema.methods.hasPermission = function (area) {
   if (this.role === 'super') return true;
   return this.permissions[area] === true;

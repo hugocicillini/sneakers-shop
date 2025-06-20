@@ -5,17 +5,13 @@ import {
 } from '@/services/users.service';
 import { createContext, useContext, useEffect, useState } from 'react';
 
-// Criar o contexto de autenticação
 export const AuthContext = createContext();
 
-// Provider component
 export const AuthProvider = ({ children }) => {
-  // Estado para armazenar os dados do usuário logado
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [refreshTimeout, setRefreshTimeout] = useState(null);
 
-  // Verificar se existe um usuário salvo no localStorage ao iniciar
   useEffect(() => {
     const loadUserFromStorage = () => {
       try {
@@ -26,20 +22,17 @@ export const AuthProvider = ({ children }) => {
           setLoading(false);
           return;
         }
-        // Verificar se o token expirou
         const tokenData = JSON.parse(atob(token.split('.')[1]));
-        const expirationTime = tokenData.exp * 1000; // converter para milissegundos
+        const expirationTime = tokenData.exp * 1000;
 
         if (Date.now() >= expirationTime) {
           logout();
         } else {
           setUser(JSON.parse(storedUser));
 
-          // Configurar timer para renovar token antes de expirar
           const timeToExpire = expirationTime - Date.now();
           if (timeToExpire < 24 * 60 * 60 * 1000) {
-            // Se expira em menos de 24h
-            setTimeout(() => refreshTokenUser(), timeToExpire - 60000); // Renovar 1 min antes
+            setTimeout(() => refreshTokenUser(), timeToExpire - 60000);
           }
         }
       } catch (error) {
@@ -53,7 +46,6 @@ export const AuthProvider = ({ children }) => {
     loadUserFromStorage();
   }, []);
 
-  // Função para renovar o token
   const refreshTokenUser = async () => {
     try {
       const response = await refreshToken();
@@ -61,7 +53,6 @@ export const AuthProvider = ({ children }) => {
       if (response.success) {
         const { token } = response;
 
-        // Salvar novo token
         localStorage.setItem('token', token);
 
         const tokenData = JSON.parse(atob(token.split('.')[1]));
@@ -69,10 +60,8 @@ export const AuthProvider = ({ children }) => {
         const timeToExpire = expirationTime - Date.now();
 
         if (timeToExpire > 60000) {
-          // Limpar timeout anterior se existir
           if (refreshTimeout) clearTimeout(refreshTimeout);
 
-          // Definir novo timeout
           const timeout = setTimeout(refreshTokenUser, timeToExpire - 60000);
           setRefreshTimeout(timeout);
         }
@@ -86,25 +75,19 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  // Função para realizar login
   const login = async (email, password) => {
     try {
       setLoading(true);
 
-      // Chamada real para a API através do serviço
       const response = await loginUser(email, password);
 
       if (response.success) {
-        // Extrair o token e armazenar separadamente
         const { token, ...userData } = response.data;
 
-        // Salvar token separadamente
         localStorage.setItem('token', token);
 
-        // Salvar dados do usuário sem o token
         localStorage.setItem('user', JSON.stringify(userData));
 
-        // Atualizar o estado do usuário
         setUser(userData);
         return { success: true };
       } else {
@@ -124,22 +107,18 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  // Função para registrar um novo usuário
   const register = async (name, email, password) => {
     try {
       setLoading(true);
       const response = await registerUser(name, email, password);
 
       if (response.success) {
-        // Salvar dados do usuário e token
         const { token, ...userData } = response.data;
-        // Salvar token separadamente
+
         localStorage.setItem('token', token);
 
-        // Salvar dados do usuário sem o token
         localStorage.setItem('user', JSON.stringify(userData));
 
-        // Atualizar o estado do usuário
         setUser(userData);
         return { success: true };
       } else {
@@ -153,7 +132,6 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  // Função para realizar logout
   const logout = () => {
     localStorage.removeItem('user');
     localStorage.removeItem('token');
@@ -164,12 +142,9 @@ export const AuthProvider = ({ children }) => {
 
   const updateUserData = (newUserData) => {
     try {
-      // Mesclar com dados existentes
       const userData = newUserData.data ? newUserData.data : newUserData;
 
-      // Atualizar o estado do usuário
       setUser((prevUser) => {
-        // Se o usuario atual tem propriedade user (estrutura aninhada)
         if (prevUser && prevUser.user) {
           return {
             ...prevUser,
@@ -179,14 +154,12 @@ export const AuthProvider = ({ children }) => {
             },
           };
         }
-        // Caso contrário, atualizar diretamente
         return {
           ...prevUser,
           ...userData,
         };
       });
 
-      // Atualizar no localStorage
       const storedUser = localStorage.getItem('user');
       if (storedUser) {
         try {
@@ -212,10 +185,8 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  // Verificar se o usuário está autenticado
   const isAuthenticated = !!user;
 
-  // Valores a serem fornecidos pelo contexto
   const value = {
     user,
     setUser,
@@ -230,7 +201,6 @@ export const AuthProvider = ({ children }) => {
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 };
 
-// Hook personalizado para usar o contexto de autenticação
 export const useAuth = () => {
   const context = useContext(AuthContext);
   if (!context) {

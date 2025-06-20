@@ -40,24 +40,19 @@ const cartSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-// Método para calcular o preço total do carrinho
 cartSchema.pre('save', function (next) {
-  // Calcular o preço total dos itens
   this.totalPrice = this.items.reduce(
     (total, item) => total + item.price * item.quantity,
     0
   );
 
-  // Calcular o preço final com desconto
   this.finalPrice = Math.max(0, this.totalPrice - this.discount);
 
-  // Atualizar a data da última atividade
   this.lastActivity = new Date();
 
   next();
 });
 
-// Método para verificar se um produto já existe no carrinho
 cartSchema.methods.hasItem = function (sneakerId, variantId) {
   return this.items.some(
     (item) =>
@@ -66,7 +61,6 @@ cartSchema.methods.hasItem = function (sneakerId, variantId) {
   );
 };
 
-// Método para encontrar um item no carrinho
 cartSchema.methods.findItem = function (sneakerId, variantId) {
   return this.items.find(
     (item) =>
@@ -75,9 +69,7 @@ cartSchema.methods.findItem = function (sneakerId, variantId) {
   );
 };
 
-// Método para adicionar um produto ao carrinho
 cartSchema.methods.addItem = function (item) {
-  // Se o item já existe, atualizar a quantidade
   const existingItem = this.findItem(item.sneaker, item.variant);
   if (existingItem) {
     existingItem.quantity += item.quantity;
@@ -86,16 +78,13 @@ cartSchema.methods.addItem = function (item) {
   }
 };
 
-// Método para remover um item do carrinho
 cartSchema.methods.removeItem = function (cartItemId) {
   const initialLength = this.items.length;
   this.items = this.items.filter((item) => item.cartItemId !== cartItemId);
 
-  // Retorna se algo foi removido
   return initialLength > this.items.length;
 };
 
-// Método para atualizar a quantidade de um item
 cartSchema.methods.updateItemQuantity = function (cartItemId, quantity) {
   const item = this.items.find((item) => item.cartItemId === cartItemId);
   if (item && quantity > 0) {
@@ -105,7 +94,6 @@ cartSchema.methods.updateItemQuantity = function (cartItemId, quantity) {
   return false;
 };
 
-// Método para limpar o carrinho
 cartSchema.methods.clearCart = function () {
   this.items = [];
   this.appliedCouponCode = null;
@@ -113,7 +101,6 @@ cartSchema.methods.clearCart = function () {
   return true;
 };
 
-// Método para verificar disponibilidade de todos os itens
 cartSchema.methods.checkAvailability = async function () {
   const unavailableItems = [];
 
@@ -125,7 +112,7 @@ cartSchema.methods.checkAvailability = async function () {
         name: item.name,
         size: item.size,
         requested: item.quantity,
-        available: 0, // Este valor será atualizado pelo validateAvailability
+        available: 0,
       });
     }
   }

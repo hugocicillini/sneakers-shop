@@ -24,10 +24,9 @@ const couponSchema = new mongoose.Schema(
       required: true,
       min: 0,
     },
-    // NOVO: Limite máximo de desconto para cupons percentuais
     maxDiscountValue: {
       type: Number,
-      default: null, // null significa sem limite
+      default: null,
     },
     minimumPurchase: {
       type: Number,
@@ -35,7 +34,7 @@ const couponSchema = new mongoose.Schema(
     },
     maxUses: {
       type: Number,
-      default: null, // null significa uso ilimitado
+      default: null,
     },
     usesCount: {
       type: Number,
@@ -45,7 +44,6 @@ const couponSchema = new mongoose.Schema(
       type: Number,
       default: 1,
     },
-    // NOVO: Rastreamento de usuários que usaram o cupom
     usedByUsers: [
       {
         userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
@@ -57,12 +55,10 @@ const couponSchema = new mongoose.Schema(
       type: Boolean,
       default: true,
     },
-    // NOVO: Compatibilidade com outros cupons
     canBeCombined: {
       type: Boolean,
       default: false,
     },
-    // NOVO: Segmentação por tipo de usuário
     userType: {
       type: String,
       enum: ['all', 'new', 'returning', 'vip'],
@@ -88,7 +84,6 @@ const couponSchema = new mongoose.Schema(
         ref: 'Sneaker',
       },
     ],
-    // NOVO: Exclusões específicas de produtos
     excludedSneakers: [
       {
         type: mongoose.Schema.Types.ObjectId,
@@ -101,29 +96,23 @@ const couponSchema = new mongoose.Schema(
   }
 );
 
-// Método para validar se um cupom é aplicável
 couponSchema.methods.isValid = function (user, cartTotal, cartItems = []) {
   const now = new Date();
 
-  // Verificar se o cupom está ativo
   if (!this.isActive) return { valid: false, message: 'Cupom inativo.' };
 
-  // Verificar datas de validade
   if (now < this.startDate || (this.endDate && now > this.endDate))
     return { valid: false, message: 'Cupom fora do período de validade.' };
 
-  // Verificar limite de usos totais
   if (this.maxUses !== null && this.usesCount >= this.maxUses)
     return { valid: false, message: 'Limite de usos do cupom atingido.' };
 
-  // Verificar valor mínimo de compra
   if (cartTotal < this.minimumPurchase)
     return {
       valid: false,
       message: `Valor mínimo de compra: R$ ${this.minimumPurchase.toFixed(2)}`,
     };
 
-  // Verificar uso por usuário específico
   if (user && user._id) {
     const userUsage = this.usedByUsers.filter(
       (usage) => usage.userId.toString() === user._id.toString()
@@ -136,10 +125,7 @@ couponSchema.methods.isValid = function (user, cartTotal, cartItems = []) {
       };
   }
 
-  // Verificar tipo de usuário
   if (user && this.userType !== 'all') {
-    // Esta parte requer mais lógica no seu sistema para identificar o tipo de usuário
-    // Exemplo simples:
     if (this.userType === 'new' && user.orderCount > 0)
       return {
         valid: false,
@@ -151,17 +137,13 @@ couponSchema.methods.isValid = function (user, cartTotal, cartItems = []) {
         valid: false,
         message: 'Cupom válido apenas para clientes recorrentes.',
       };
-
-    // Para "vip" precisaria de uma lógica específica do seu sistema
   }
 
-  // Verificar restrições de produto (se houver itens e restrições)
   if (
     cartItems.length > 0 &&
     (this.applicableCategories.length > 0 || this.applicableSneakers.length > 0)
   ) {
     const hasApplicableItem = cartItems.some((item) => {
-      // Verificar se o produto está excluído
       if (
         this.excludedSneakers.length > 0 &&
         this.excludedSneakers.some(
@@ -171,7 +153,6 @@ couponSchema.methods.isValid = function (user, cartTotal, cartItems = []) {
         return false;
       }
 
-      // Verificar se o produto está na lista de aplicáveis
       if (
         this.applicableSneakers.length > 0 &&
         this.applicableSneakers.some(
@@ -181,7 +162,6 @@ couponSchema.methods.isValid = function (user, cartTotal, cartItems = []) {
         return true;
       }
 
-      // Verificar se a categoria do produto está na lista de aplicáveis
       if (
         this.applicableCategories.length > 0 &&
         item.categoryId &&
@@ -205,14 +185,12 @@ couponSchema.methods.isValid = function (user, cartTotal, cartItems = []) {
   return { valid: true, message: 'Cupom válido' };
 };
 
-// Método para aplicar o desconto ao valor total
 couponSchema.methods.applyDiscount = function (total) {
   let discountAmount = 0;
 
   if (this.discountType === 'percentage') {
     discountAmount = (this.discountValue / 100) * total;
 
-    // Aplicar limite máximo se existir
     if (this.maxDiscountValue && discountAmount > this.maxDiscountValue) {
       discountAmount = this.maxDiscountValue;
     }

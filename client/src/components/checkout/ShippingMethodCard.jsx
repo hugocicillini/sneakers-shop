@@ -33,7 +33,7 @@ const ShippingMethodCard = ({ methods, selectedValue, onChange }) => (
           key={method.id}
           htmlFor={method.id}
           className={cn(
-            'flex items-center space-x-3 border rounded-lg p-4 cursor-pointer transition-all',
+            'flex items-center space-x-3 border rounded-lg p-2 px-4 cursor-pointer transition-all',
             method.id === selectedValue
               ? 'border-primary/50 bg-primary/5 shadow-sm'
               : 'hover:bg-gray-50'

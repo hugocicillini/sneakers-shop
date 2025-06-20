@@ -9,7 +9,6 @@ import {
   useRef,
 } from 'react';
 
-// Definição de contexto e estado inicial
 const CartContext = createContext();
 
 const initialState = {
@@ -20,7 +19,6 @@ const initialState = {
   appliedCoupon: null,
 };
 
-// Types para as ações do reducer (melhora a manutenção)
 const ACTION_TYPES = {
   SET_CART: 'SET_CART',
   ADD_ITEM_SUCCESS: 'ADD_ITEM_SUCCESS',
@@ -34,7 +32,6 @@ const ACTION_TYPES = {
   SET_ERROR: 'SET_ERROR',
 };
 
-// Reducer refatorado para gerenciar o carrinho
 function cartReducer(state, action) {
   switch (action.type) {
     case ACTION_TYPES.SET_CART:
@@ -46,7 +43,6 @@ function cartReducer(state, action) {
       };
 
     case ACTION_TYPES.ADD_ITEM_SUCCESS:
-      // Agora sempre esperamos o carrinho completo da API
       return {
         ...state,
         items: action.payload.items || state.items,
@@ -88,10 +84,8 @@ function cartReducer(state, action) {
 
     case ACTION_TYPES.SET_COUPON:
       if (action.payload) {
-        // Aplicando cupom - extraído para função auxiliar
         return applyCouponToState(state, action.payload);
       } else {
-        // Removendo cupom - extraído para função auxiliar
         return removeCouponFromState(state);
       }
 
@@ -106,39 +100,29 @@ function cartReducer(state, action) {
   }
 }
 
-// Funções auxiliares para o reducer - melhora legibilidade
 function applyCouponToState(state, couponData) {
   const { discountValue, discountType } = couponData;
+
+  const subtotalValue = state.items.reduce((total, item) => {
+    const originalPrice = parseFloat(item.originalPrice || item.price) || 0;
+    const quantity = parseInt(item.quantity) || 0;
+    return total + originalPrice * quantity;
+  }, 0);
+
   let totalDiscount = 0;
 
-  const updatedItems = state.items.map((item) => {
-    // Guardar o preço original se ainda não existir
-    const originalPrice = item.originalPrice || item.price;
-    let discountedPrice = originalPrice;
+  if (discountType === 'percentage') {
+    totalDiscount = subtotalValue * (discountValue / 100);
+  } else if (discountType === 'fixed_amount') {
+    totalDiscount = Math.min(parseFloat(discountValue), subtotalValue);
+  }
 
-    // Calcular o preço com desconto
-    if (discountType === 'percentage') {
-      const itemDiscount = originalPrice * (discountValue / 100);
-      discountedPrice = originalPrice - itemDiscount;
-      // Acumular o desconto total considerando a quantidade
-      totalDiscount += itemDiscount * item.quantity;
-    } else if (discountType === 'fixed_amount') {
-      const totalItems = state.items.reduce((sum, i) => sum + i.quantity, 0);
-      const itemDiscount = discountValue / totalItems;
-      discountedPrice = Math.max(0, originalPrice - itemDiscount);
-      // Para descontos de valor fixo, usamos o valor diretamente
-      totalDiscount = discountValue;
-    }
+  const updatedItems = state.items.map((item) => ({
+    ...item,
+    originalPrice: item.originalPrice || item.price,
+    hasDiscount: true,
+  }));
 
-    return {
-      ...item,
-      originalPrice,
-      price: discountedPrice,
-      hasDiscount: true,
-    };
-  });
-
-  // Atualizar o valor do desconto no objeto do cupom
   const updatedCoupon = {
     ...couponData,
     discountAmount: parseFloat(totalDiscount.toFixed(2)),
@@ -154,7 +138,6 @@ function applyCouponToState(state, couponData) {
 function removeCouponFromState(state) {
   const restoredItems = state.items.map((item) => ({
     ...item,
-    price: item.originalPrice || item.price,
     hasDiscount: false,
     originalPrice: undefined,
   }));
@@ -166,13 +149,11 @@ function removeCouponFromState(state) {
   };
 }
 
-// Provider do contexto do carrinho - refatorado
 export function CartProvider({ children }) {
   const [state, dispatch] = useReducer(cartReducer, initialState);
   const { isAuthenticated, user } = useAuth();
   const hasLoadedCart = useRef(false);
 
-  // Função auxiliar para tratamento de erros - evita repetição
   const handleError = (error, customMessage = 'Ocorreu um erro') => {
     console.error(customMessage, error);
     dispatch({ type: ACTION_TYPES.SET_ERROR, payload: error.message });
@@ -183,11 +164,9 @@ export function CartProvider({ children }) {
     });
   };
 
-  // Carregar o carrinho
   useEffect(() => {
     if (!isAuthenticated || hasLoadedCart.current) return;
 
-    // Restaurar cupom salvo
     const savedCoupon = localStorage.getItem('appliedCoupon');
     if (savedCoupon) {
       try {
@@ -218,7 +197,6 @@ export function CartProvider({ children }) {
     hasLoadedCart.current = true;
   }, [isAuthenticated]);
 
-  // Lidar com logout - limpar carrinho
   useEffect(() => {
     if (user === null) {
       dispatch({ type: ACTION_TYPES.CLEAR_CART_SUCCESS });
@@ -226,7 +204,6 @@ export function CartProvider({ children }) {
     }
   }, [user]);
 
-  // Sincronizar carrinho local com servidor após login
   useEffect(() => {
     if (!isAuthenticated || !user) return;
 
@@ -245,10 +222,8 @@ export function CartProvider({ children }) {
 
         await syncLocalItemsToServer(localCart.items);
 
-        // Limpar o localStorage
         localStorage.removeItem('cart');
 
-        // Buscar o carrinho atualizado
         const updatedCart = await cartService.getCart();
         dispatch({
           type: ACTION_TYPES.SET_CART,
@@ -264,7 +239,6 @@ export function CartProvider({ children }) {
     syncCartWithServer();
   }, [isAuthenticated, user]);
 
-  // Função para sincronizar itens locais - maior organização
   async function syncLocalItemsToServer(localItems) {
     let successCount = 0;
 
@@ -288,7 +262,6 @@ export function CartProvider({ children }) {
       }
     }
 
-    // Notificar o resultado da sincronização
     if (successCount > 0) {
       toast({
         title: 'Carrinho sincronizado',
@@ -306,9 +279,7 @@ export function CartProvider({ children }) {
     return successCount;
   }
 
-  // Prepara um item local para sincronização
   function prepareItemForSync(item) {
-    // Verifica se um ID é um ObjectId válido do MongoDB
     const isValidObjectId = (id) => id && /^[0-9a-fA-F]{24}$/.test(id);
 
     const price =
@@ -336,7 +307,6 @@ export function CartProvider({ children }) {
     return cleanItem;
   }
 
-  // Função addItem otimizada e limpa (sem logs de depuração)
   const addItem = async (item) => {
     if (!item || !item.sneakerId) {
       toast({
@@ -350,16 +320,13 @@ export function CartProvider({ children }) {
     dispatch({ type: ACTION_TYPES.SET_LOADING, payload: true });
 
     try {
-      // Buscar o carrinho atualizado do servidor
       const currentCart = await cartService.getCart();
       const currentItems = currentCart.items || [];
 
-      // Normalizar valores para comparação segura
       const sneakerId = String(item.sneakerId);
       const size = String(item.size);
       const color = String(item.color || '').toLowerCase();
 
-      // Verificação de duplicatas
       const existingItem = currentItems.find(
         (cartItem) =>
           String(cartItem.sneakerId) === sneakerId &&
@@ -367,7 +334,6 @@ export function CartProvider({ children }) {
           String(cartItem.color || '').toLowerCase() === color
       );
 
-      // Se encontrou item existente com ID, atualiza a quantidade
       if (existingItem && existingItem.cartItemId) {
         const newQuantity = existingItem.quantity + (item.quantity || 1);
 
@@ -377,7 +343,6 @@ export function CartProvider({ children }) {
         );
 
         if (updateResult.success) {
-          // Buscar o carrinho atualizado após a modificação
           const updatedCart = await cartService.getCart();
 
           dispatch({
@@ -393,7 +358,6 @@ export function CartProvider({ children }) {
             variant: 'success',
           });
 
-          // Recalcular descontos se houver cupom aplicado
           if (state.appliedCoupon) {
             dispatch({
               type: ACTION_TYPES.SET_COUPON,
@@ -404,31 +368,29 @@ export function CartProvider({ children }) {
           throw new Error(updateResult.error || 'Erro ao atualizar quantidade');
         }
       } else {
-        // Se item não existe ou não tem ID, adiciona como novo
         const itemToAdd = {
           ...item,
           price:
             parseFloat(item.price) || parseFloat(item.originalPrice) || 799.9,
         };
 
-        // Se encontrou um item duplicado sem ID, ajustar a quantidade
         if (existingItem) {
           itemToAdd.quantity = existingItem.quantity + (item.quantity || 1);
 
-          // Remover o item antigo sem ID, se possível
           try {
             if (existingItem._id) {
               await cartService.removeFromCart(existingItem._id);
             }
           } catch (removeError) {
-            // Prosseguir mesmo se não conseguir remover o item antigo
+            console.error(
+              `Erro ao remover item existente antes de adicionar novo: ${removeError.message}`
+            );
           }
         }
 
         const result = await cartService.addToCart(itemToAdd);
 
         if (result.success) {
-          // Buscar o carrinho atualizado após a adição
           const finalCart = await cartService.getCart();
 
           dispatch({
@@ -442,7 +404,6 @@ export function CartProvider({ children }) {
             variant: 'success',
           });
 
-          // Recalcular descontos se houver cupom aplicado
           if (state.appliedCoupon) {
             dispatch({
               type: ACTION_TYPES.SET_COUPON,
@@ -460,7 +421,6 @@ export function CartProvider({ children }) {
     }
   };
 
-  // Remover item do carrinho - refatorado
   const removeItem = async (cartItemId) => {
     dispatch({ type: ACTION_TYPES.SET_LOADING, payload: true });
 
@@ -481,7 +441,6 @@ export function CartProvider({ children }) {
           description: 'Item removido do carrinho com sucesso',
         });
 
-        // Recalcular descontos se houver cupom aplicado
         if (state.appliedCoupon) {
           dispatch({
             type: ACTION_TYPES.SET_COUPON,
@@ -498,7 +457,6 @@ export function CartProvider({ children }) {
     }
   };
 
-  // Atualizar quantidade - refatorado
   const updateQuantity = async (cartItemId, quantity) => {
     if (quantity < 1) return;
 
@@ -520,7 +478,6 @@ export function CartProvider({ children }) {
           },
         });
 
-        // Recalcular descontos se houver cupom aplicado
         if (state.appliedCoupon) {
           dispatch({
             type: ACTION_TYPES.SET_COUPON,
@@ -537,7 +494,6 @@ export function CartProvider({ children }) {
     }
   };
 
-  // Limpar o carrinho - refatorado
   const clearCart = async () => {
     dispatch({ type: ACTION_TYPES.SET_LOADING, payload: true });
 
@@ -547,7 +503,6 @@ export function CartProvider({ children }) {
       if (result.success) {
         dispatch({ type: ACTION_TYPES.CLEAR_CART_SUCCESS });
 
-        // Também removemos qualquer cupom aplicado
         localStorage.removeItem('appliedCoupon');
 
         toast({
@@ -564,17 +519,13 @@ export function CartProvider({ children }) {
     }
   };
 
-  // Função para resetar o carrinho localmente
   const resetCart = () => {
     dispatch({ type: ACTION_TYPES.CLEAR_CART_SUCCESS });
     localStorage.removeItem('appliedCoupon');
   };
 
-  // Aplicar cupom - refatorado
   const applyCoupon = (couponData) => {
     if (couponData) {
-      // Se estamos aplicando um cupom novo, garantimos que ele tenha
-      // os dados básicos mesmo se não for calculado imediatamente
       const preparedCoupon = {
         ...couponData,
         discountAmount: couponData.discountAmount || 0,
@@ -594,12 +545,10 @@ export function CartProvider({ children }) {
     }
   };
 
-  // Funções para controlar visibilidade do carrinho
   const toggleCart = () => dispatch({ type: ACTION_TYPES.TOGGLE_CART });
   const setCartOpen = (isOpen) =>
     dispatch({ type: ACTION_TYPES.SET_CART_OPEN, payload: isOpen });
 
-  // Cálculos de valores totais - refatorados para maior segurança
   const cartCount = state.items.reduce((total, item) => {
     const quantity = parseInt(item?.quantity) || 0;
     return total + (quantity > 0 ? quantity : 0);
@@ -607,25 +556,27 @@ export function CartProvider({ children }) {
 
   const subtotal = state.items
     .reduce((total, item) => {
-      const price = parseFloat(item?.price) || 0;
+      const originalPrice = parseFloat(item?.originalPrice || item?.price) || 0;
       const quantity = parseInt(item?.quantity) || 0;
-      const itemTotal = price * quantity;
+      const itemTotal = originalPrice * quantity;
       return total + (itemTotal > 0 ? itemTotal : 0);
     }, 0)
     .toFixed(2);
-
-  const pixDiscount = parseFloat((parseFloat(subtotal) * 0.05).toFixed(2));
 
   const couponDiscount = state.appliedCoupon
     ? parseFloat(state.appliedCoupon.discountAmount || 0)
     : 0;
 
-  const totalWithDiscounts = Math.max(
-    0,
-    parseFloat((parseFloat(subtotal) - pixDiscount - couponDiscount).toFixed(2))
-  );
+  const calculatePixDiscount = (totalAmount) => {
+    return parseFloat((totalAmount * 0.05).toFixed(2));
+  };
 
-  // Valores e funções disponíveis no contexto
+  const totalWithCoupon = Math.max(0, parseFloat(subtotal) - couponDiscount);
+
+  const pixDiscount = calculatePixDiscount(totalWithCoupon);
+
+  const totalWithDiscounts = totalWithCoupon;
+
   const value = {
     items: state.items,
     isOpen: state.isOpen,
@@ -636,6 +587,7 @@ export function CartProvider({ children }) {
     pixDiscount,
     couponDiscount,
     totalWithDiscounts,
+    calculatePixDiscount,
     addItem,
     removeItem,
     updateQuantity,
@@ -650,7 +602,6 @@ export function CartProvider({ children }) {
   return <CartContext.Provider value={value}>{children}</CartContext.Provider>;
 }
 
-// Hook para acessar o contexto do carrinho
 export function useCart() {
   const context = useContext(CartContext);
   if (!context) {

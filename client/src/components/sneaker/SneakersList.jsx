@@ -1,7 +1,7 @@
 import { useWishlist } from '@/contexts/WishlistContext';
 import { Heart, ShoppingCart, Star } from 'lucide-react';
-import { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { useCallback, useState } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
 import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
 import { Card, CardContent, CardFooter, CardTitle } from '../ui/card';
@@ -10,46 +10,51 @@ const SneakersList = ({ sneakers }) => {
   const { isInWishlist, toggleWishlistItem, loading } = useWishlist();
   const [pendingActions, setPendingActions] = useState({});
 
-  // Função para formatar preço em reais
-  const formatPrice = (price) => {
-    return price ? price.toFixed(2).replace('.', ',') : '0,00';
+  const navigate = useNavigate();
+
+  const formatPrice = (value) => {
+    return new Intl.NumberFormat('pt-BR', {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    }).format(value);
   };
 
-  // Função para favoritar/desfavoritar um item
-  const handleToggleFavorite = async (sneakerId, event) => {
-    // Impedir que o clique se propague para o card
-    event.stopPropagation();
+  const handleToggleFavorite = useCallback(
+    async (sneakerId, event) => {
+      event.stopPropagation();
+      event.preventDefault();
 
-    // Evitar ações repetidas enquanto uma está pendente
-    if (pendingActions[sneakerId] || loading) return;
+      if (pendingActions[sneakerId] || loading) return;
 
-    setPendingActions((prev) => ({ ...prev, [sneakerId]: true }));
+      setPendingActions((prev) => ({ ...prev, [sneakerId]: true }));
 
-    try {
-      await toggleWishlistItem(sneakerId);
-    } finally {
-      // Sempre liberar o estado de pendente, mesmo em caso de erro
-      setPendingActions((prev) => ({ ...prev, [sneakerId]: false }));
-    }
-  };
+      try {
+        await toggleWishlistItem(sneakerId);
+      } catch (error) {
+        console.error('Erro ao atualizar wishlist:', error);
+      } finally {
+        setPendingActions((prev) => ({ ...prev, [sneakerId]: false }));
+      }
+    },
+    [pendingActions, loading, toggleWishlistItem]
+  );
 
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-6">
-      {sneakers.length > 0 ? (
+      {sneakers.length > 0 &&
         sneakers.map((item) => (
           <Link
             key={item._id}
             onClick={(e) => {
               e.preventDefault();
-              // Forçar uma navegação completa para garantir que o componente seja remontado
-              window.location.href = `/sneaker/${
+              const url = `/sneaker/${
                 item.slug
               }?color=${item.defaultColor.toLowerCase()}`;
+              navigate(url);
             }}
             className="no-underline text-inherit"
           >
             <Card className="flex flex-col h-full overflow-hidden transition-all duration-300 hover:shadow-lg group relative">
-              {/* Badge para desconto e destaque no canto direito */}
               <div className="absolute top-0 right-0 z-20 flex flex-col">
                 {item.isFeatured && (
                   <Badge
@@ -63,7 +68,6 @@ const SneakersList = ({ sneakers }) => {
 
               <div className="relative w-full overflow-hidden bg-gray-50">
                 <div className="w-full h-[280px] sm:h-[220px] transition-all duration-300">
-                  {/* Botão de favoritar */}
                   <button
                     className={`absolute top-2 left-2 z-10 p-1.5 bg-white rounded-full shadow-sm transition-all duration-300 
                       ${
@@ -96,7 +100,6 @@ const SneakersList = ({ sneakers }) => {
                     />
                   </button>
 
-                  {/* Imagem do produto - ajustado para usar coverImage ou fallback */}
                   <img
                     src={
                       item.coverImage?.url ||
@@ -116,7 +119,6 @@ const SneakersList = ({ sneakers }) => {
                   {item.name}
                 </CardTitle>
 
-                {/* Descrição curta se disponível */}
                 {item.shortDescription && (
                   <p className="text-sm text-gray-500 line-clamp-2 mb-2">
                     {item.shortDescription}
@@ -152,7 +154,6 @@ const SneakersList = ({ sneakers }) => {
                     )}
                   </div>
 
-                  {/* Exibir avaliação se disponível */}
                   {item.rating > 0 && (
                     <div className="flex items-center">
                       <Star className="h-4 w-4 fill-yellow-400 text-yellow-400 mr-1" />
@@ -163,31 +164,14 @@ const SneakersList = ({ sneakers }) => {
               </CardContent>
 
               <CardFooter className="px-4 pb-4 pt-0">
-                <Button
-                  variant="destructive"
-                  className="w-full gap-2 transition-all duration-300 hover:brightness-110"
-                  onClick={(e) => {
-                    e.preventDefault();
-                    // Lógica para adicionar ao carrinho
-                  }}
-                >
+                <Button variant="destructive" className="w-full">
                   <ShoppingCart size={18} />
                   Comprar
                 </Button>
               </CardFooter>
             </Card>
           </Link>
-        ))
-      ) : (
-        <div className="col-span-full text-center py-10">
-          <p className="text-lg text-gray-500">
-            Nenhum produto encontrado com os filtros selecionados.
-          </p>
-          <p className="text-sm text-gray-400 mt-2">
-            Tente ajustar seus critérios de busca.
-          </p>
-        </div>
-      )}
+        ))}
     </div>
   );
 };

@@ -1,10 +1,12 @@
 import { BrowserRouter, Route, Routes } from 'react-router-dom';
-import ProtectedRoute from './components/ProtectedRoute';
+import ProtectedRoute from './components/auth/ProtectedRoute';
 import { AuthProvider } from './contexts/AuthContext';
 import { CartProvider } from './contexts/CartContext';
 import { WishlistProvider } from './contexts/WishlistContext';
+import ScrollToTop from './layout/ScrollToTop';
 import Account from './pages/Account';
 import Cart from './pages/Cart';
+import Confirmation from './pages/Confirmation';
 import ForgotPassword from './pages/ForgotPassword';
 import Home from './pages/Home';
 import Identification from './pages/Identification';
@@ -14,7 +16,6 @@ import Register from './pages/Register';
 import SearchFound from './pages/SearchFound';
 import SneakerDetail from './pages/SneakerDetail';
 import Wishlist from './pages/Wishlist';
-import Confirmation from './pages/Confirmation';
 
 function App() {
   return (
@@ -22,6 +23,7 @@ function App() {
       <WishlistProvider>
         <CartProvider>
           <BrowserRouter>
+            <ScrollToTop />
             <Routes>
               <Route path="/" element={<Home />} />
 
@@ -58,8 +60,10 @@ function App() {
 
               <Route path="/checkout/payment" element={<Payment />} />
 
-              <Route path="/checkout/confirmation/:orderId" element={<Confirmation />} />
-
+              <Route
+                path="/checkout/confirmation/:orderId"
+                element={<Confirmation />}
+              />
             </Routes>
           </BrowserRouter>
         </CartProvider>

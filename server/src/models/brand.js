@@ -27,14 +27,12 @@ const brandSchema = new mongoose.Schema(
   }
 );
 
-// Virtual para acessar sneakers desta marca
 brandSchema.virtual('sneakers', {
   ref: 'Sneaker',
   localField: '_id',
   foreignField: 'brand',
 });
 
-// Pre-save hook para gerar slug automaticamente
 brandSchema.pre('save', function (next) {
   if (!this.slug || this.isModified('name')) {
     this.slug = this.name
@@ -47,7 +45,6 @@ brandSchema.pre('save', function (next) {
   next();
 });
 
-// Índice para performance em buscas por nome
 brandSchema.index({ name: 'text' });
 brandSchema.index({ isActive: 1 });
 

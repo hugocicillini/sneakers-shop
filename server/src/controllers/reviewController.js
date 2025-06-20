@@ -23,9 +23,7 @@ export const getSneakerReviewPreview = async (req, res, next) => {
       });
     }
 
-    // Buscar resumo de estatísticas + 5 reviews destacadas em uma única operação
     const [stats, featuredReviews] = await Promise.all([
-      // Estatísticas completas em uma única agregação
       Review.aggregate([
         {
           $match: {
@@ -93,7 +91,6 @@ export const getSneakerReviewPreview = async (req, res, next) => {
         },
       ]),
 
-      // As 5 melhores reviews verificadas (priorizando as mais recentes com alta avaliação)
       Review.find({ sneaker: sneakerId, isVerified: true })
         .sort({ rating: -1, createdAt: -1 })
         .limit(5)
@@ -109,7 +106,6 @@ export const getSneakerReviewPreview = async (req, res, next) => {
             ratingBreakdown: { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 },
           };
 
-    // Adicionar percentuais para cada nível de avaliação
     const withPercentages = {
       ...ratingStats,
       ratingPercentages: Object.entries(ratingStats.ratingBreakdown).reduce(
@@ -160,7 +156,6 @@ export const getSneakerReviews = async (req, res, next) => {
       });
     }
 
-    // Configurar a ordenação com base no parâmetro sort
     let sortOption = {};
     switch (sort) {
       case 'recent':
@@ -176,26 +171,23 @@ export const getSneakerReviews = async (req, res, next) => {
         sortOption = { createdAt: -1 };
     }
 
-    // Esta é a parte que implementa a paginação (10 em 10)
     const reviews = await Review.find({ sneaker: sneakerId, isVerified: true })
       .select('-__v')
       .populate('user', 'name -userType')
       .sort(sortOption)
-      .skip(skip) // Pula os reviews já carregados
-      .limit(limit); // Limita a 10 reviews por página
+      .skip(skip)
+      .limit(limit);
 
     const total = await Review.countDocuments({
       sneaker: sneakerId,
       isVerified: true,
     });
 
-    // Obter estatísticas de rating
     const ratingStats = await Review.aggregate([
       { $match: { sneaker: sneakerId, isVerified: true } },
       { $group: { _id: '$rating', count: { $sum: 1 } } },
     ]);
 
-    // Formatar estatísticas para fácil uso no frontend
     const stats = {};
     ratingStats.forEach((stat) => {
       stats[stat._id] = stat.count;
@@ -203,11 +195,11 @@ export const getSneakerReviews = async (req, res, next) => {
 
     res.json({
       success: true,
-      data: reviews, // Os 10 reviews da página atual
-      page, // Número da página atual
-      pages: Math.ceil(total / limit), // Total de páginas
-      total, // Total de reviews
-      stats, // Estatísticas de rating
+      data: reviews,
+      page,
+      pages: Math.ceil(total / limit),
+      total,
+      stats,
       averageRating: sneakerExists.rating,
     });
   } catch (error) {
@@ -243,7 +235,6 @@ export const createReview = async (req, res, next) => {
       });
     }
 
-    // Verificar se o usuário já avaliou este produto
     const alreadyReviewed = await Review.findOne({
       user: req.user._id,
       sneaker: sneakerId,
@@ -256,13 +247,12 @@ export const createReview = async (req, res, next) => {
       });
     }
 
-    // Criar o review
     const review = new Review({
       user: req.user._id,
       sneaker: sneakerId,
       rating: Number(rating),
       comment,
-      isVerified: true, // Presumimos que o usuário fez uma compra verificada
+      isVerified: true,
     });
 
     const createdReview = await review.save();
@@ -299,7 +289,6 @@ export const updateReview = async (req, res, next) => {
       });
     }
 
-    // Verificar se o review pertence ao usuário atual ou se é admin
     if (
       review.user.toString() !== req.user._id.toString() &&
       req.user.userType !== 'admin'
@@ -310,13 +299,10 @@ export const updateReview = async (req, res, next) => {
       });
     }
 
-    // Atualizar campos
     review.rating = Number(rating) || review.rating;
     review.comment = comment || review.comment;
 
     const updatedReview = await review.save();
-
-    // O middleware post-save no model do review atualizará a média de avaliação do sneaker
 
     res.json({
       success: true,
@@ -348,7 +334,6 @@ export const deleteReview = async (req, res, next) => {
       });
     }
 
-    // Verificação de permissão (mantido como está)
     if (
       review.user.toString() !== req.user._id.toString() &&
       req.user.userType !== 'admin'
@@ -359,16 +344,12 @@ export const deleteReview = async (req, res, next) => {
       });
     }
 
-    // Salvar ID do sneaker antes de deletar
     const sneakerId = review.sneaker;
 
-    // Usar método correto que aciona os hooks
     await Review.findByIdAndDelete(reviewId);
 
-    // Atualizar manualmente só se os hooks não funcionarem
     const sneaker = await Sneaker.findById(sneakerId);
     if (sneaker) {
-      // Usar o método correto que existe no modelo
       await sneaker.updateRatingInfo();
       await sneaker.save();
     }

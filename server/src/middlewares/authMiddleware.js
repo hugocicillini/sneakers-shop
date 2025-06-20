@@ -4,7 +4,6 @@ import { Client } from '../models/client.js';
 import { User } from '../models/user.js';
 import logger from '../utils/logger.js';
 
-// Middleware para verificar autenticação
 export const authMiddleware = async (req, res, next) => {
   try {
     const authHeader = req.headers.authorization;

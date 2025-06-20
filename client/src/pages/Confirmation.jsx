@@ -43,7 +43,6 @@ const Confirmation = () => {
   const [order, setOrder] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  console.log('Order ID:', orderId);
   useEffect(() => {
     fetchOrder(orderId).then((data) => {
       setOrder(data);
@@ -85,13 +84,18 @@ const Confirmation = () => {
       </LayoutCheckout>
     );
   }
-
   // Determina o método de pagamento
   let paymentType = 'card';
   if (order.paymentDetails?.method?.includes('pix')) paymentType = 'pix';
   if (
     order.paymentDetails?.method?.includes('boleto') ||
-    order.paymentDetails?.method?.includes('ticket')
+    order.paymentDetails?.method?.includes('ticket') ||
+    order.paymentDetails?.method?.includes('bolbradesco') ||
+    order.paymentDetails?.method?.includes('boletobancario') ||
+    order.paymentDetails?.method?.includes('pec') ||
+    order.paymentDetails?.method?.includes('paguefacil') ||
+    order.paymentDetails?.method?.includes('rapipago') ||
+    order.paymentDetails?.method?.includes('redlink')
   )
     paymentType = 'boleto';
 

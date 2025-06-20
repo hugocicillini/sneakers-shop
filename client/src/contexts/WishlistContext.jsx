@@ -14,7 +14,6 @@ export const WishlistProvider = ({ children }) => {
   const [loading, setLoading] = useState(true);
   const { isAuthenticated } = useAuth();
 
-  // Carregar wishlist quando o componente montar ou usuário autenticar
   const loadWishlist = async () => {
     if (!isAuthenticated) {
       setWishlistItems([]);
@@ -45,12 +44,10 @@ export const WishlistProvider = ({ children }) => {
     }
   };
 
-  // Carregar wishlist no início e quando o status de autenticação mudar
   useEffect(() => {
     loadWishlist();
   }, [isAuthenticated]);
 
-  // Verificar se um produto está na wishlist
   const isInWishlist = (sneakerId) => {
     return wishlistItems.some((item) => {
       if (item.sneaker) {
@@ -60,7 +57,6 @@ export const WishlistProvider = ({ children }) => {
     });
   };
 
-  // Adicionar à wishlist
   const addToWishlistItem = async (sneakerId) => {
     if (!isAuthenticated) {
       toast({
@@ -72,7 +68,6 @@ export const WishlistProvider = ({ children }) => {
     }
 
     try {
-      // Atualiza o estado local imediatamente para feedback instantâneo
       setWishlistItems((prev) => [...prev, { sneaker: { _id: sneakerId } }]);
 
       const response = await addToWishlist(sneakerId);
@@ -87,7 +82,6 @@ export const WishlistProvider = ({ children }) => {
         variant: 'default',
       });
 
-      // Recarrega a wishlist para garantir sincronização
       await loadWishlist();
       return true;
     } catch (error) {
@@ -102,19 +96,16 @@ export const WishlistProvider = ({ children }) => {
     }
   };
 
-  // Remover da wishlist
   const removeFromWishlistItem = async (sneakerId) => {
     if (!isAuthenticated) return false;
 
     try {
-      // Atualiza o estado local imediatamente para feedback instantâneo
       setWishlistItems((prev) =>
         prev.filter((item) =>
           typeof item === 'object' ? item._id !== sneakerId : item !== sneakerId
         )
       );
 
-      // Chama a API em segundo plano
       const response = await removeFromWishlist(sneakerId);
 
       if (!response.success) {
@@ -127,7 +118,6 @@ export const WishlistProvider = ({ children }) => {
         variant: 'default',
       });
 
-      // Recarrega a wishlist para garantir sincronização
       await loadWishlist();
       return true;
     } catch (error) {
@@ -142,7 +132,6 @@ export const WishlistProvider = ({ children }) => {
     }
   };
 
-  // Alternar item na wishlist (adicionar se não existir, remover se existir)
   const toggleWishlistItem = async (sneakerId) => {
     if (isInWishlist(sneakerId)) {
       return removeFromWishlistItem(sneakerId);

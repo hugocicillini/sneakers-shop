@@ -1,8 +1,8 @@
-import Footer from '@/components/Footer';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/contexts/AuthContext';
 import { useCart } from '@/contexts/CartContext';
 import { useWishlist } from '@/contexts/WishlistContext';
+import Footer from '@/layout/Footer';
 import {
   CircleUserRound,
   Heart,
@@ -11,47 +11,174 @@ import {
   ShoppingBag,
   X,
 } from 'lucide-react';
-import { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
-import Search from '../components/Search';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Link, useLocation } from 'react-router-dom';
+import Search from '../components/sneaker/Search';
 
-const LayoutBase = ({ children, search, setSearch }) => {
+const LayoutBase = ({ children }) => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
 
-  // Substituído o useContext por useAuth para acessar as funções de autenticação
   const { user, logout } = useAuth();
+  const { wishlistCount } = useWishlist();
+  const { cartCount } = useCart();
+  const location = useLocation();
 
-  const { wishlistItems } = useWishlist();
-
-  const { cartCount } = useCart(); // Adicionei o cartCount aqui para o carrinho
-
-  // Calcular número de itens na wishlist - garantir que sempre seja um número
-  const wishlistCount = Array.isArray(wishlistItems) ? wishlistItems.length : 0;
-
-  // Verificar tamanho da tela para determinar se é mobile
+  // Detectar mudanças de tela de forma otimizada
   useEffect(() => {
     const handleResize = () => {
-      setIsMobile(window.innerWidth < 768);
+      const mobile = window.innerWidth < 768;
+      setIsMobile(mobile);
+
+      // Fechar menu automaticamente em desktop
+      if (!mobile) {
+        setIsMenuOpen(false);
+      }
     };
 
-    handleResize(); // Verificar ao carregar
-    window.addEventListener('resize', handleResize);
+    // Definir estado inicial
+    handleResize();
 
+    // Listener otimizado com debounce
+    let timeoutId;
+    const debouncedResize = () => {
+      clearTimeout(timeoutId);
+      timeoutId = setTimeout(handleResize, 100);
+    };
+
+    window.addEventListener('resize', debouncedResize);
     return () => {
-      window.removeEventListener('resize', handleResize);
+      window.removeEventListener('resize', debouncedResize);
+      clearTimeout(timeoutId);
     };
   }, []);
 
-  // Fechar o menu quando mudar de tela mobile para desktop
+  // Fechar menu ao navegar para nova página
   useEffect(() => {
-    if (!isMobile) {
-      setIsMenuOpen(false);
+    setIsMenuOpen(false);
+  }, [location.pathname]);
+
+  // Prevenir scroll do body quando menu estiver aberto
+  useEffect(() => {
+    if (isMenuOpen) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = 'unset';
     }
-  }, [isMobile]);
+
+    // Cleanup ao desmontar componente
+    return () => {
+      document.body.style.overflow = 'unset';
+    };
+  }, [isMenuOpen]);
+
+  const toggleMenu = useCallback(() => {
+    setIsMenuOpen((prev) => !prev);
+  }, []);
+
+  const closeMenu = useCallback(() => {
+    setIsMenuOpen(false);
+  }, []);
+
+  const handleLogout = useCallback(() => {
+    logout();
+    closeMenu();
+  }, [logout, closeMenu]);
+
+  // 🎯 Extrair o nome corretamente da estrutura { user: { user: { name: "Hugo Cliente" } } }
+  const userName = useMemo(() => {
+    // Estrutura correta baseada no JSON fornecido
+    const fullName = user?.user?.name || '';
+
+    if (!fullName) return '';
+
+    // Extrair apenas o primeiro nome
+    const firstName = fullName.split(' ')[0];
+    return firstName;
+  }, [user]);
+
+  // 🎯 Verificar se o usuário está logado
+  const isLoggedIn = useMemo(() => {
+    return !!user?.user?.name;
+  }, [user]);
+
+  // Componente BadgeCount reutilizável
+  const BadgeCount = ({ count, bgColor = 'bg-red-500' }) => {
+    if (count <= 0) return null;
+
+    return (
+      <span
+        className={`absolute -top-2 -right-2 ${bgColor} text-white rounded-full h-5 w-5 flex items-center justify-center text-xs font-medium`}
+      >
+        {count > 99 ? '99+' : count}
+      </span>
+    );
+  };
+
+  // Componente UserMenu para desktop
+  const UserMenu = () => {
+    if (isLoggedIn) {
+      return (
+        <div className="flex items-center gap-2">
+          <Link to="/account" className="flex items-center gap-1">
+            <Button variant="ghost" className="flex gap-2 items-center">
+              <CircleUserRound size={18} />
+              <span className="text-sm">Olá, {userName || 'Usuário'}</span>
+            </Button>
+          </Link>
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={logout}
+            title="Sair"
+            className="text-gray-600 hover:text-red-500 transition-colors"
+          >
+            <LogOut size={18} />
+          </Button>
+        </div>
+      );
+    }
+
+    return (
+      <div className="flex items-center gap-2">
+        <Link to="/login">
+          <Button variant="ghost" className="flex gap-1 items-center">
+            <CircleUserRound size={18} />
+            <span className="text-sm">Entrar</span>
+          </Button>
+        </Link>
+        <span className="text-gray-300">|</span>
+        <Link to="/register">
+          <Button variant="ghost">
+            <span className="text-sm">Cadastrar</span>
+          </Button>
+        </Link>
+      </div>
+    );
+  };
+
+  // Componente ActionButtons para carrinho e wishlist
+  const ActionButtons = ({ showLabels = true }) => (
+    <>
+      <Link to="/wishlist" className="flex items-center gap-1 relative">
+        <Button variant="outline" className="relative">
+          <Heart size={18} />
+          {showLabels && <span className="ml-1">Favoritos</span>}
+          <BadgeCount count={wishlistCount} />
+        </Button>
+      </Link>
+      <Link to="/checkout/cart" className="flex items-center gap-1 relative">
+        <Button variant="outline" className="relative">
+          <ShoppingBag size={18} />
+          {showLabels && <span className="ml-1">Carrinho</span>}
+          <BadgeCount count={cartCount} bgColor="bg-black" />
+        </Button>
+      </Link>
+    </>
+  );
 
   return (
-    <div>
+    <div className="min-h-screen flex flex-col">
       <header className="bg-[#f7f7f7] py-4 md:py-6 px-4 shadow">
         <div className="flex items-center justify-between md:justify-around">
           {/* Botão do Menu Mobile */}
@@ -64,12 +191,15 @@ const LayoutBase = ({ children, search, setSearch }) => {
           </button>
 
           <div className="hidden md:flex">
-            <Search search={search} setSearch={setSearch} />
+            <Search />
           </div>
 
           {/* Logo Centralizado */}
           <div className="flex items-center justify-center">
-            <Link to="/" className="font-bold text-lg">
+            <Link
+              to="/"
+              className="font-bold text-lg focus:outline-none focus:ring-0 rounded"
+            >
               <img src="/logo.png" alt="Logo" className="h-16" />
             </Link>
           </div>
@@ -79,180 +209,144 @@ const LayoutBase = ({ children, search, setSearch }) => {
             <div className="relative">
               <Link to="/wishlist">
                 <Heart size={24} />
-                <span className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full h-5 w-5 flex items-center justify-center text-xs">
-                  {wishlistCount}
-                </span>
+                <BadgeCount count={wishlistCount} />
               </Link>
             </div>
             <div className="relative">
               <Link to="/checkout/cart">
                 <ShoppingBag size={24} />
-                <span className="absolute -top-2 -right-2 bg-black text-white rounded-full h-5 w-5 flex items-center justify-center text-xs">
-                  1
-                </span>
+                <BadgeCount count={cartCount} bgColor="bg-black" />
               </Link>
             </div>
           </div>
 
           {/* Menu Desktop */}
           <nav className="hidden md:flex items-center gap-6">
-            {user ? (
-              <div className="flex items-center gap-2">
-                <Link to="/account" className="flex items-center gap-1">
-                  <Button variant="ghost" className="flex gap-2 items-center">
-                    <CircleUserRound />
-                    <span className="text-sm">
-                      Olá, {user.user.name.split(' ')[0]}
-                    </span>
-                  </Button>
-                </Link>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={logout}
-                  title="Sair"
-                  className="text-gray-600 hover:text-red-500"
-                >
-                  <LogOut size={18} />
-                </Button>
-              </div>
-            ) : (
-              <div className="flex items-center gap-2">
-                <Link to="/login">
-                  <Button variant="ghost" className="flex gap-1 items-center">
-                    <CircleUserRound size={18} />
-                    <span className="text-sm">Entrar</span>
-                  </Button>
-                </Link>
-                <span>|</span>
-                <Link to="/register">
-                  <Button variant="ghost">
-                    <span className="text-sm">Cadastrar</span>
-                  </Button>
-                </Link>
-              </div>
-            )}
-            <Link to="/wishlist" className="flex items-center gap-1 relative">
-              <Button variant="outline">
-                <Heart />
-                Favoritos
-                {wishlistCount > 0 && (
-                  <span className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full h-5 w-5 flex items-center justify-center text-xs">
-                    {wishlistCount}
-                  </span>
-                )}{' '}
-              </Button>
-            </Link>
-            <Link
-              to="/checkout/cart"
-              className="flex items-center gap-1 relative"
-            >
-              <Button variant="outline">
-                <ShoppingBag />
-                Carrinho
-                {cartCount > 0 && (
-                  <span className="absolute -top-2 -right-2 bg-black text-white rounded-full h-5 w-5 flex items-center justify-center text-xs">
-                    {cartCount}
-                  </span>
-                )}
-              </Button>
-            </Link>
+            <UserMenu />
+            <ActionButtons />
           </nav>
         </div>
 
-        {/* Campo de Busca abaixo do header em mobile */}
+        {/* Campo de Busca Mobile */}
         <div className="mt-4 mx-auto max-w-md md:hidden">
-          <Search search={search} setSearch={setSearch} />
+          <Search />
         </div>
       </header>
 
-      {/* Menu Mobile deslizando da esquerda */}
-      <div
-        className={`fixed top-0 left-0 bottom-0 w-64 z-50 bg-white transition-transform duration-300 transform ${
+      {/* Menu Mobile Sidebar */}
+      <aside
+        className={`fixed top-0 left-0 bottom-0 w-80 max-w-[85vw] z-50 bg-white shadow-2xl transition-transform duration-300 transform ${
           isMenuOpen ? 'translate-x-0' : '-translate-x-full'
         }`}
+        aria-hidden={!isMenuOpen}
       >
-        <div className="p-4 flex justify-end">
+        {/* Header do Menu */}
+        <div className="p-4 border-b flex justify-between items-center">
+          <h2 className="text-lg font-semibold">
+            {isLoggedIn ? `Olá, ${userName}!` : 'Menu'}
+          </h2>
           <button
-            onClick={() => setIsMenuOpen(false)}
-            className="text-black"
+            onClick={closeMenu}
+            className="p-2 rounded-lg hover:bg-gray-100 transition-colors"
             aria-label="Fechar menu"
           >
-            <X size={24} />
+            <X size={20} />
           </button>
         </div>
-        <nav className="flex flex-col items-start py-4">
+
+        {/* Navigation Menu */}
+        <nav className="flex flex-col py-4" role="navigation">
           <Link
             to="/"
-            className="w-full px-8 py-3 text-black"
-            onClick={() => setIsMenuOpen(false)}
+            className="w-full px-6 py-4 text-gray-900 hover:bg-gray-50 transition-colors border-b border-gray-100 flex items-center gap-3"
+            onClick={closeMenu}
           >
-            Início
+            <span>Início</span>
           </Link>
 
-          {user ? (
+          {isLoggedIn ? (
             <>
               <Link
                 to="/account"
-                className="w-full px-8 py-3 text-black"
-                onClick={() => setIsMenuOpen(false)}
+                className="w-full px-6 py-4 text-gray-900 hover:bg-gray-50 transition-colors border-b border-gray-100 flex items-center gap-3"
+                onClick={closeMenu}
               >
-                Minha Conta
+                <CircleUserRound size={18} />
+                <span>Minha Conta</span>
               </Link>
-              <Button
-                className="w-full px-8 py-3 text-left text-red-600"
-                onClick={() => {
-                  logout();
-                  setIsMenuOpen(false);
-                }}
+              <button
+                className="w-full px-6 py-4 text-left text-red-600 hover:bg-red-50 transition-colors border-b border-gray-100 flex items-center gap-3"
+                onClick={handleLogout}
               >
-                Sair
-              </Button>
+                <LogOut size={18} />
+                <span>Sair</span>
+              </button>
             </>
           ) : (
             <>
               <Link
                 to="/login"
-                className="w-full px-8 py-3 text-black"
-                onClick={() => setIsMenuOpen(false)}
+                className="w-full px-6 py-4 text-gray-900 hover:bg-gray-50 transition-colors border-b border-gray-100 flex items-center gap-3"
+                onClick={closeMenu}
               >
-                Entrar
+                <CircleUserRound size={18} />
+                <span>Entrar</span>
               </Link>
               <Link
                 to="/register"
-                className="w-full px-8 py-3 text-black"
-                onClick={() => setIsMenuOpen(false)}
+                className="w-full px-6 py-4 text-gray-900 hover:bg-gray-50 transition-colors border-b border-gray-100"
+                onClick={closeMenu}
               >
-                Cadastrar
+                <span>Cadastrar</span>
               </Link>
             </>
           )}
+
           <Link
             to="/wishlist"
-            className="w-full px-8 py-3 text-black"
-            onClick={() => setIsMenuOpen(false)}
+            className="w-full px-6 py-4 text-gray-900 hover:bg-gray-50 transition-colors border-b border-gray-100 flex items-center justify-between"
+            onClick={closeMenu}
           >
-            Favoritos
+            <div className="flex items-center gap-3">
+              <Heart size={18} />
+              <span>Favoritos</span>
+            </div>
+            {wishlistCount > 0 && (
+              <span className="bg-red-500 text-white rounded-full px-2 py-1 text-xs">
+                {wishlistCount}
+              </span>
+            )}
           </Link>
+
           <Link
             to="/checkout/cart"
-            className="w-full px-8 py-3 text-black"
-            onClick={() => setIsMenuOpen(false)}
+            className="w-full px-6 py-4 text-gray-900 hover:bg-gray-50 transition-colors flex items-center justify-between"
+            onClick={closeMenu}
           >
-            Carrinho
+            <div className="flex items-center gap-3">
+              <ShoppingBag size={18} />
+              <span>Carrinho</span>
+            </div>
+            {cartCount > 0 && (
+              <span className="bg-black text-white rounded-full px-2 py-1 text-xs">
+                {cartCount}
+              </span>
+            )}
           </Link>
         </nav>
-      </div>
+      </aside>
 
-      {/* Overlay para fechar o menu ao clicar fora */}
+      {/* Overlay */}
       {isMenuOpen && (
         <div
-          className="fixed inset-0 bg-black bg-opacity-50 z-40"
-          onClick={() => setIsMenuOpen(false)}
-        ></div>
+          className="fixed inset-0 bg-black/50 z-40 backdrop-blur-sm"
+          onClick={closeMenu}
+          aria-hidden="true"
+        />
       )}
 
-      <main className="min-h-screen">{children}</main>
+      {/* Main Content */}
+      <main className="flex-1">{children}</main>
       <Footer />
     </div>
   );

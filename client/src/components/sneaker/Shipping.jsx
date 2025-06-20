@@ -25,7 +25,6 @@ const Delivery = () => {
       return;
     }
 
-    // Aqui você pode adicionar a lógica real de cálculo de frete
     setShowShippingOptions(true);
   };
 

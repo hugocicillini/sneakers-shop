@@ -2,106 +2,28 @@ import {
   Card,
   CardContent,
   CardDescription,
-  CardFooter,
   CardHeader,
   CardTitle,
 } from '@/components/ui/card';
 import AddressDialog from '@/components/user/Addresses';
+import OrderList from '@/components/user/Order';
 import ProfileDialog from '@/components/user/Profile';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from '@/hooks/use-toast';
 import LayoutBase from '@/layout/LayoutBase';
 import {
-  createAddress,
+  createUserAddress,
   deleteUserAddress,
   getUserAddresses,
   updateUserAddress,
 } from '@/services/addresses.service';
 import { getUserOrders } from '@/services/order.service';
 import { getUser, updateUser } from '@/services/users.service';
-import {
-  ChevronDown,
-  ChevronUp,
-  CreditCard,
-  Loader2,
-  Package,
-  QrCode,
-  Receipt,
-  Ticket,
-  Truck,
-} from 'lucide-react';
+import { Loader2, Package } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
-import OrderList from '@/components/Order';
-
-const statusMap = {
-  pending: {
-    label: 'Pedido Recebido',
-    color: 'bg-blue-100 text-blue-800',
-    step: 1,
-    description:
-      'Seu pedido foi recebido e está aguardando confirmação de pagamento.',
-  },
-  payment_approved: {
-    label: 'Pagamento Aprovado',
-    color: 'bg-green-100 text-green-800',
-    step: 2,
-    description: 'Pagamento confirmado! Seu pedido está sendo preparado.',
-  },
-  separating: {
-    label: 'Em Separação',
-    color: 'bg-yellow-100 text-yellow-800',
-    step: 3,
-    description: 'Estamos separando seus produtos para envio.',
-  },
-  shipping: {
-    label: 'Aguardando Transporte',
-    color: 'bg-orange-100 text-orange-800',
-    step: 4,
-    description:
-      'Seu pedido está pronto e aguardando coleta pela transportadora.',
-  },
-  in_transit: {
-    label: 'Em Transporte',
-    color: 'bg-purple-100 text-purple-800',
-    step: 5,
-    description: 'Seu pedido está a caminho do endereço de entrega.',
-  },
-  delivered: {
-    label: 'Entregue',
-    color: 'bg-green-200 text-green-900',
-    step: 6,
-    description: 'Pedido entregue com sucesso!',
-  },
-  cancelled: {
-    label: 'Cancelado',
-    color: 'bg-red-100 text-red-800',
-    step: 0,
-    description: 'Este pedido foi cancelado.',
-  },
-};
-
-const statusSteps = [
-  { key: 'pending', label: 'Recebido' },
-  { key: 'payment_approved', label: 'Pagamento' },
-  { key: 'separating', label: 'Separação' },
-  { key: 'shipping', label: 'Aguardando Transporte' },
-  { key: 'in_transit', label: 'Em Transporte' },
-  { key: 'delivered', label: 'Entregue' },
-  { key: 'cancelled', label: 'Cancelado' },
-];
-
-const paymentIcons = {
-  pix: <QrCode className="text-green-600" size={18} />,
-  boleto: <Ticket className="text-blue-600" size={18} />,
-  card: <CreditCard className="text-purple-600" size={18} />,
-};
-
-const formatCurrency = (value) =>
-  value?.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 
 const Account = () => {
   const { user, updateUserData } = useAuth();
-  const [expandedOrders, setExpandedOrders] = useState({});
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [userData, setUserData] = useState(null);
@@ -109,7 +31,7 @@ const Account = () => {
   const hasFetchedRef = useRef(false);
 
   useEffect(() => {
-    const fetchUserData = async () => {
+    const fetchAllData = async () => {
       if (!user || hasFetchedRef.current) {
         setLoading(false);
         return;
@@ -117,12 +39,13 @@ const Account = () => {
 
       hasFetchedRef.current = true;
       setLoading(true);
-      try {
-        const [userResponse, addressResponse] = await Promise.all([
-          getUser(),
-          getUserAddresses(),
-        ]);
 
+      try {
+        // Fazer todas as chamadas da API de forma concorrente
+        const [userResponse, addressResponse, ordersResponse] =
+          await Promise.all([getUser(), getUserAddresses(), getUserOrders()]);
+
+        // Processar resposta dos dados do usuário
         if (userResponse.success && userResponse.user) {
           setUserData(userResponse.user);
         } else {
@@ -133,6 +56,7 @@ const Account = () => {
           });
         }
 
+        // Processar resposta dos endereços
         if (addressResponse.success) {
           setAddresses(addressResponse.data || []);
         } else {
@@ -145,6 +69,20 @@ const Account = () => {
           });
           setAddresses([]);
         }
+
+        // Processar resposta dos pedidos
+        if (ordersResponse.success) {
+          setOrders(ordersResponse.data || []);
+        } else {
+          toast({
+            title: 'Erro ao buscar pedidos',
+            description:
+              ordersResponse.message ||
+              'Não foi possível carregar seus pedidos.',
+            variant: 'destructive',
+          });
+          setOrders([]);
+        }
       } catch (error) {
         console.error('Erro ao buscar dados:', error);
         toast({
@@ -153,30 +91,16 @@ const Account = () => {
             'Não foi possível carregar seus dados. Verifique sua conexão.',
           variant: 'destructive',
         });
+        // Limpar estados em caso de erro
         setAddresses([]);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    const fetchOrders = async () => {
-      try {
-        const response = await getUserOrders();
-        setOrders(response.data || []);
-      } catch (error) {
-        toast({
-          title: 'Erro ao buscar pedidos',
-          description: error.message,
-          variant: 'destructive',
-        });
+        setOrders([]);
       } finally {
         setLoading(false);
       }
     };
 
     if (user) {
-      fetchUserData();
-      fetchOrders();
+      fetchAllData();
     }
   }, [user]);
 
@@ -231,7 +155,7 @@ const Account = () => {
           variant: 'success',
         });
       } else {
-        const response = await createAddress(addressData);
+        const response = await createUserAddress(addressData);
 
         if (!response.success) {
           toast({
@@ -308,13 +232,6 @@ const Account = () => {
     }
   };
 
-  const toggleOrderExpand = (orderId) => {
-    setExpandedOrders((prev) => ({
-      ...prev,
-      [orderId]: !prev[orderId],
-    }));
-  };
-
   return (
     <LayoutBase>
       <div className="mx-auto w-4/5 py-8 px-4">
@@ -338,7 +255,6 @@ const Account = () => {
                     <ProfileDialog
                       onUserUpdated={handleUserUpdated}
                       userData={userData}
-                      setUserData={setUserData}
                     />
                   </CardTitle>
                 </CardHeader>

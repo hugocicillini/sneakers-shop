@@ -5,15 +5,12 @@ import {
   saveCartToLocalStorage,
 } from '@/lib/utils';
 
-// Buscar carrinho (do servidor se autenticado, ou do localStorage)
 export const getCart = async () => {
   try {
-    // Se não está autenticado, retorna o carrinho local
     if (!isAuthenticated()) {
       return getCartFromLocalStorage();
     }
 
-    // Buscar carrinho do servidor
     const response = await fetch(`${import.meta.env.VITE_API_URL}/carts`, {
       method: 'GET',
       headers: getAuthHeaders(),
@@ -24,7 +21,6 @@ export const getCart = async () => {
       return data.cart || data;
     }
 
-    // Fallback para localStorage em caso de erro
     console.warn('Erro ao buscar carrinho do servidor, usando localStorage');
     return getCartFromLocalStorage();
   } catch (error) {
@@ -33,36 +29,26 @@ export const getCart = async () => {
   }
 };
 
-// Adicionar item ao carrinho
 export const addToCart = async (item) => {
   if (!item.sneakerId) {
     return { success: false, error: 'ID do produto é necessário' };
   }
 
   try {
-    // Preparar o item para adicionar
     const cartItem = {
       ...item,
       quantity: item.quantity || 1,
     };
 
-    // Para usuários autenticados, enviar para o servidor
     if (isAuthenticated()) {
-      // Tratar o variantId que é obrigatório
-      // Usar sizeId como variantId se ele não existir
       if (!cartItem.variantId && cartItem.sizeId) {
         cartItem.variantId = cartItem.sizeId;
-      }
-      // Se não tiver variantId nem sizeId, usar colorId ou gerar um ID baseado em propriedades
-      else if (!cartItem.variantId) {
+      } else if (!cartItem.variantId) {
         if (cartItem.colorId) {
           cartItem.variantId = cartItem.colorId;
         } else {
-          // Gerar um ID com base nas propriedades disponíveis
           console.warn('variantId não fornecido, tentando gerar um substituto');
-          // Verificar se temos um sizeId válido primeiro antes de usar propriedades alternativas
           if (cartItem.size && cartItem.color) {
-            // Construir um ID baseado no produto, tamanho e cor
             cartItem.variantId =
               cartItem.sizeId ||
               `${cartItem.sneakerId}-${cartItem.size}-${cartItem.color}`;
@@ -86,12 +72,10 @@ export const addToCart = async (item) => {
         return await response.json();
       }
 
-      // Obter detalhes do erro
       const errorData = await response.json().catch(() => ({}));
       throw new Error(errorData.message || `Erro ${response.status}`);
     }
 
-    // Para usuários não autenticados, salvar no localStorage
     return addToLocalCart(cartItem);
   } catch (error) {
     console.error('Erro ao adicionar ao carrinho:', error);
@@ -99,11 +83,9 @@ export const addToCart = async (item) => {
   }
 };
 
-// Adicionar ao carrinho local
 const addToLocalCart = (item) => {
   const cart = getCartFromLocalStorage();
 
-  // Verificar se o item já existe
   const existingIndex = cart.items.findIndex(
     (i) =>
       i.sneakerId === item.sneakerId &&
@@ -111,28 +93,22 @@ const addToLocalCart = (item) => {
       i.color === item.color
   );
 
-  // Item já existe: atualizar quantidade
   if (existingIndex >= 0) {
     cart.items[existingIndex].quantity += item.quantity;
   } else {
-    // Novo item: adicionar ao carrinho com ID único
     cart.items.push({
       ...item,
       cartItemId: `${item.sneakerId}-${item.size}-${item.color}-${Date.now()}`,
     });
   }
 
-  // Salvar carrinho atualizado
   saveCartToLocalStorage(cart);
   return { success: true, cart };
 };
 
-// Atualizar quantidade
 export const updateCartItemQuantity = async (cartItemId, quantity) => {
   if (quantity < 1)
     return { success: false, error: 'Quantidade deve ser pelo menos 1' };
-
-  console.log('Atualizando quantidade do item:', cartItemId, quantity);
 
   try {
     if (isAuthenticated()) {
@@ -165,7 +141,6 @@ export const updateCartItemQuantity = async (cartItemId, quantity) => {
   }
 };
 
-// Remover item do carrinho
 export const removeFromCart = async (cartItemId) => {
   try {
     if (isAuthenticated()) {
@@ -197,7 +172,6 @@ export const removeFromCart = async (cartItemId) => {
   }
 };
 
-// Limpar carrinho
 export const clearCart = async () => {
   try {
     if (isAuthenticated()) {
@@ -217,75 +191,6 @@ export const clearCart = async () => {
     return { success: true, cart: { items: [] } };
   } catch (error) {
     console.error('Erro ao limpar carrinho:', error);
-    return { success: false, error: error.message };
-  }
-};
-
-// Sincronizar carrinho do localStorage para o servidor (após login)
-export const syncCart = async () => {
-  // Só prosseguir se estiver autenticado
-  if (!isAuthenticated()) {
-    return { success: false, message: 'Usuário não autenticado' };
-  }
-
-  // Verificar se existe um carrinho local para sincronizar
-  const localCart = getCartFromLocalStorage();
-  if (!localCart.items || localCart.items.length === 0) {
-    return { success: true, message: 'Nenhum item para sincronizar' };
-  }
-
-  try {
-    let successCount = 0;
-
-    // Adicionar cada item do carrinho local ao servidor
-    for (const item of localCart.items) {
-      try {
-        // Remover propriedades que podem causar problemas
-        const cleanItem = {
-          sneakerId: item.sneakerId,
-          size: item.size,
-          color: item.color,
-          name: item.name,
-          price: item.price,
-          quantity: item.quantity,
-          image: item.image,
-          brand: item.brand,
-          slug: item.slug,
-        };
-
-        const result = await addToCart(cleanItem);
-        if (result.success) {
-          successCount++;
-        }
-      } catch (e) {
-        console.warn(
-          `Falha ao adicionar item ${item.name || item.sneakerId}:`,
-          e
-        );
-      }
-    }
-
-    // Se pelo menos um item foi transferido com sucesso
-    if (successCount > 0) {
-      // Limpar o carrinho local
-      localStorage.removeItem('cart');
-
-      // Buscar o carrinho atualizado do servidor
-      const updatedCart = await getCart();
-
-      return {
-        success: true,
-        message: `${successCount} de ${localCart.items.length} itens sincronizados com sucesso`,
-        cart: updatedCart,
-      };
-    }
-
-    return {
-      success: false,
-      message: 'Não foi possível sincronizar nenhum item',
-    };
-  } catch (error) {
-    console.error('Erro ao sincronizar carrinho:', error);
     return { success: false, error: error.message };
   }
 };

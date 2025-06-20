@@ -4,30 +4,24 @@ import { useCart } from '@/contexts/CartContext';
 import { toast } from '@/hooks/use-toast';
 import LayoutBase from '@/layout/LayoutBase';
 import { getSneakerBySlug } from '@/services/sneakers.service';
-import { EyeIcon, LockIcon, ShoppingBagIcon } from 'lucide-react';
-import { useEffect, useState } from 'react';
-import { Link, useLocation, useParams } from 'react-router-dom';
+import { LockIcon, ShoppingBagIcon } from 'lucide-react';
+import { useCallback, useEffect, useState } from 'react';
+import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 
 import CarouselSneakers from '@/components/sneaker/CarouselSneakers';
 import ImageGallery from '@/components/sneaker/ImageGallery';
 import Delivery from '@/components/sneaker/Shipping';
 import SneakerInfo from '@/components/sneaker/SneakerInfo';
 import ToggleFavorite from '@/components/sneaker/ToggleFavorite';
-import { useRef } from 'react';
 
 const SneakerDetail = () => {
   const { slug } = useParams();
   const location = useLocation();
-
-  function getQueryParam(param) {
-    const params = new URLSearchParams(location.search);
-    return params.get(param);
-  }
-
-  const colorParam = getQueryParam('color');
+  const navigate = useNavigate();
 
   const [sneaker, setSneaker] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   const [selectedImage, setSelectedImage] = useState(null);
   const [selectedSize, setSelectedSize] = useState(null);
   const [selectedColor, setSelectedColor] = useState(null);
@@ -39,52 +33,72 @@ const SneakerDetail = () => {
   });
 
   const { addItem, toggleCart } = useCart();
-  const hasFetchedRef = useRef(false);
+
+  const getQueryParam = useCallback(
+    (param) => {
+      const params = new URLSearchParams(location.search);
+      return params.get(param);
+    },
+    [location.search]
+  );
+
+  const fetchSneakerData = useCallback(async () => {
+    if (!slug) return;
+
+    setLoading(true);
+    setError(null);
+
+    setSelectedImage(null);
+    setColorImages([]);
+
+    try {
+      const colorParam = getQueryParam('color');
+
+      const sneakerData = await getSneakerBySlug(slug, colorParam);
+
+      if (!sneakerData) {
+        setError('Tênis não encontrado');
+        return;
+      }
+
+      setSneaker(sneakerData);
+      setSelectedColor(sneakerData.selectedColor);
+
+      setSelectedPrice({
+        originalPrice: sneakerData.basePrice,
+        finalPrice: sneakerData.finalPrice,
+        discount: sneakerData.baseDiscount,
+      });
+
+      if (sneakerData.colorImages && sneakerData.colorImages.length > 0) {
+        setColorImages(sneakerData.colorImages);
+        const primaryImage = sneakerData.colorImages.find(
+          (img) => img.isPrimary
+        );
+        setSelectedImage(primaryImage?.url || sneakerData.colorImages[0]?.url);
+      } else if (sneakerData.coverImage) {
+        setColorImages([]);
+        setSelectedImage(sneakerData.coverImage.url);
+      }
+
+      setSelectedSize(null);
+    } catch (error) {
+      console.error('❌ Erro ao buscar tênis:', error);
+      setError('Erro ao carregar produto');
+    } finally {
+      setLoading(false);
+    }
+  }, [slug, getQueryParam]);
 
   useEffect(() => {
-    const fetchSneaker = async () => {
-      try {
-        setLoading(true);
+    fetchSneakerData();
+  }, [fetchSneakerData]);
 
-        if (hasFetchedRef.current) {
-          return;
-        }
-
-        hasFetchedRef.current = true;
-
-        const sneakerData = await getSneakerBySlug(slug, colorParam);
-        setSneaker(sneakerData);
-
-        setSelectedColor(sneakerData.selectedColor);
-
-        setSelectedPrice({
-          originalPrice: sneakerData.basePrice,
-          finalPrice: sneakerData.finalPrice,
-          discount: sneakerData.baseDiscount,
-        });
-
-        if (sneakerData.colorImages && sneakerData.colorImages.length > 0) {
-          setColorImages(sneakerData.colorImages);
-
-          const primaryImage = sneakerData.colorImages.find(
-            (img) => img.isPrimary
-          );
-          setSelectedImage(
-            primaryImage?.url || sneakerData.colorImages[0]?.url
-          );
-        } else if (sneakerData.coverImage) {
-          setSelectedImage(sneakerData.coverImage.url);
-        }
-
-        setLoading(false);
-      } catch (error) {
-        console.error('Erro ao buscar detalhes do tênis:', error);
-        setLoading(false);
-      }
-    };
-
-    fetchSneaker();
-  }, [slug, colorParam]);
+  useEffect(() => {
+    if (sneaker) {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  }, [sneaker?.slug]);
 
   const handleSizeSelect = (size) => {
     setSelectedSize(size);
@@ -110,16 +124,17 @@ const SneakerDetail = () => {
 
   const handleColorSelect = (color) => {
     if (color !== selectedColor) {
-      window.location.href = `/sneaker/${slug}?color=${encodeURIComponent(
-        color.toLowerCase()
-      )}`;
+      navigate(
+        `/sneaker/${slug}?color=${encodeURIComponent(color.toLowerCase())}`
+      );
     }
   };
 
   const handleAddToCart = () => {
     if (!selectedSize || !selectedColor) {
       toast({
-        title: 'Selecione o tamanho e a cor antes de adicionar ao carrinho.',
+        title: 'Selecione cor e tamanho',
+        description: 'Por favor, escolha um tamanho e uma cor disponíveis.',
         variant: 'destructive',
       });
       return;
@@ -167,25 +182,37 @@ const SneakerDetail = () => {
   if (loading) {
     return (
       <LayoutBase>
-        <div className="flex items-center justify-center h-screen">
-          <div className="animate-spin rounded-full h-16 w-16 border-t-2 border-b-2 border-primary"></div>
+        <div className="container mx-auto px-4 py-8">
+          <div className="flex justify-center items-center min-h-[400px]">
+            <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary"></div>
+          </div>
         </div>
       </LayoutBase>
     );
   }
 
-  if (!sneaker) {
+  if (error || !sneaker) {
     return (
       <LayoutBase>
-        <div className="flex items-center justify-center h-screen">
-          <p className="text-xl text-gray-600">Tênis não encontrado.</p>
+        <div className="container mx-auto px-4 py-8">
+          <div className="text-center">
+            <h2 className="text-2xl font-bold text-gray-800 mb-4">
+              Produto não encontrado
+            </h2>
+            <p className="text-gray-600 mb-6">{error}</p>
+            <button
+              onClick={() => navigate('/')}
+              className="bg-primary text-white px-6 py-2 rounded-lg hover:bg-primary/90"
+            >
+              Voltar à loja
+            </button>
+          </div>
         </div>
       </LayoutBase>
     );
   }
 
   const colorsInStock = sneaker.colorsInStock || [];
-
   const allSizes = sneaker.availableSizes || [];
 
   return (
@@ -203,6 +230,7 @@ const SneakerDetail = () => {
         <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
           {/* Seção de imagens à esquerda */}
           <ImageGallery
+            key={`${sneaker.slug}-${selectedColor}`}
             colorImages={colorImages}
             selectedImage={selectedImage}
             setSelectedImage={setSelectedImage}
@@ -226,13 +254,6 @@ const SneakerDetail = () => {
                       Apenas {sneaker.totalStock} unidades em estoque!
                     </p>
                   )}
-                <div className="flex items-center text-sm text-gray-500 mt-1">
-                  <EyeIcon size={16} className="mr-1" />
-                  <span>
-                    {Math.floor(Math.random() * 20) + 10} pessoas estão
-                    interessadas
-                  </span>
-                </div>
               </div>
             </div>
 

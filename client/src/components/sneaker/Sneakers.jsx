@@ -7,7 +7,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { getSneakers } from '@/services/sneakers.service';
 import { ChevronDown } from 'lucide-react';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import {
   Pagination,
@@ -18,42 +18,39 @@ import {
   PaginationNext,
   PaginationPrevious,
 } from '../ui/pagination';
+import BannerShipping from './BannerShipping';
 import Filter from './Filter';
 import SneakersList from './SneakersList';
 
-const Sneakers = ({ search }) => {
-  // Flag para controlar se é a primeira renderização
-  const isFirstRender = useRef(true);
-  // Referência para armazenar a última requisição
-  const lastFetchTimestamp = useRef(0);
-  // Armazenar os últimos parâmetros de busca para evitar duplicação
-  const lastFetchParams = useRef(null);
-
+const Sneakers = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const [sneakersList, setSneakersList] = useState([]);
   const [loading, setLoading] = useState(true);
   const [currentPage, setCurrentPage] = useState(1);
-  const [sneakersPerPage] = useState(10);
   const [totalSneakers, setTotalSneakers] = useState(0);
+  const [isFilterOpen, setIsFilterOpen] = useState(false);
 
-  // Inicializar sortBy a partir dos parâmetros de URL
-  const [sortBy, setSortBy] = useState(
-    searchParams.get('sortBy') || 'relevance'
-  );
+  const sneakersPerPage = 10;
 
-  const [activeFilters, setActiveFilters] = useState({
-    brands: searchParams.get('brand')?.split(',').filter(Boolean) || [],
-    sizes:
-      searchParams.get('sizes')?.split(',').map(Number).filter(Boolean) || [],
-    colors: searchParams.get('colors')?.split(',').filter(Boolean) || [],
-    price: {
-      min: searchParams.get('minPrice') || '',
-      max: searchParams.get('maxPrice') || '',
-    },
-    gender: searchParams.get('gender')?.split(',').filter(Boolean) || [],
-    tags: searchParams.get('tags')?.split(',').filter(Boolean) || [],
-    sortBy: searchParams.get('sortBy') || 'relevance',
-  });
+  const sortBy = useMemo(() => {
+    return searchParams.get('sortBy') || 'relevance';
+  }, [searchParams]);
+
+  const activeFilters = useMemo(() => {
+    return {
+      brands: searchParams.get('brand')?.split(',').filter(Boolean) || [],
+      sizes:
+        searchParams.get('sizes')?.split(',').map(Number).filter(Boolean) || [],
+      colors: searchParams.get('colors')?.split(',').filter(Boolean) || [],
+      price: {
+        min: searchParams.get('minPrice') || '',
+        max: searchParams.get('maxPrice') || '',
+      },
+      gender: searchParams.get('gender')?.split(',').filter(Boolean) || [],
+      category: searchParams.get('category')?.split(',').filter(Boolean) || [],
+      sortBy: sortBy,
+    };
+  }, [searchParams, sortBy]);
 
   const sortOptions = [
     { value: 'relevance', label: 'Relevância' },
@@ -63,138 +60,168 @@ const Sneakers = ({ search }) => {
     { value: 'newest', label: 'Mais recentes' },
   ];
 
-  const [isFilterOpen, setIsFilterOpen] = useState(false);
+  const fetchSneakers = useCallback(async () => {
+    setLoading(true);
+    try {
+      const response = await getSneakers(
+        currentPage,
+        sneakersPerPage,
+        '',
+        activeFilters
+      );
 
-  // Modificar a função fetchSneakers para usar memoização e evitar duplicação
-  const fetchSneakers = useCallback(
-    async (brandOrFilters = null) => {
-      // Verificar se os parâmetros são os mesmos da última chamada
-      const currentParams = JSON.stringify({
-        page: currentPage,
-        search,
-        filters: brandOrFilters || activeFilters,
-      });
+      setSneakersList(response.data.sneakers);
+      setTotalSneakers(response.data.total);
+    } catch (error) {
+      console.error('Error fetching sneakers:', error);
+    }
+    setLoading(false);
+  }, [currentPage, sneakersPerPage, activeFilters]);
 
-      const now = Date.now();
-      // Evitar chamadas duplicadas em menos de 300ms
+  useEffect(() => {
+    fetchSneakers();
+  }, [fetchSneakers]);
+
+  const handleFilterChange = useCallback(
+    (filters) => {
+      const filtersWithCurrentSort = {
+        ...filters,
+        sortBy: sortBy,
+      };
+
+      const params = new URLSearchParams();
+
+      if (filtersWithCurrentSort.brands?.length > 0) {
+        params.set('brand', filtersWithCurrentSort.brands.join(','));
+      }
+      if (filtersWithCurrentSort.sizes?.length > 0) {
+        params.set('sizes', filtersWithCurrentSort.sizes.join(','));
+      }
+      if (filtersWithCurrentSort.colors?.length > 0) {
+        params.set('colors', filtersWithCurrentSort.colors.join(','));
+      }
+      if (filtersWithCurrentSort.gender?.length > 0) {
+        params.set('gender', filtersWithCurrentSort.gender.join(','));
+      }
+      if (filtersWithCurrentSort.category?.length > 0) {
+        params.set('category', filtersWithCurrentSort.category.join(','));
+      }
+      if (filtersWithCurrentSort.price?.min) {
+        params.set('minPrice', filtersWithCurrentSort.price.min);
+      }
+      if (filtersWithCurrentSort.price?.max) {
+        params.set('maxPrice', filtersWithCurrentSort.price.max);
+      }
       if (
-        currentParams === lastFetchParams.current &&
-        now - lastFetchTimestamp.current < 300
+        filtersWithCurrentSort.sortBy &&
+        filtersWithCurrentSort.sortBy !== 'relevance'
       ) {
-        return;
+        params.set('sortBy', filtersWithCurrentSort.sortBy);
       }
 
-      setLoading(true);
-      lastFetchParams.current = currentParams;
-      lastFetchTimestamp.current = now;
-
-      try {
-        let filtersToApply;
-
-        if (typeof brandOrFilters === 'string') {
-          filtersToApply = { ...activeFilters, brands: [brandOrFilters] };
-          setActiveFilters((prev) => ({ ...prev, brands: [brandOrFilters] }));
-        } else if (brandOrFilters && typeof brandOrFilters === 'object') {
-          filtersToApply = brandOrFilters;
-        } else {
-          filtersToApply = activeFilters;
-        }
-
-        const response = await getSneakers(
-          currentPage,
-          sneakersPerPage,
-          search,
-          filtersToApply
-        );
-
-        setSneakersList(response.data.sneakers);
-        setTotalSneakers(response.data.total);
-      } catch (error) {
-        console.error('Error fetching sneakers:', error);
-      }
-      setLoading(false);
+      setSearchParams(params);
+      setCurrentPage(1);
+      setIsFilterOpen(false);
     },
-    [currentPage, sneakersPerPage, search, activeFilters]
+    [sortBy, setSearchParams]
   );
 
-  // Modificar o useEffect para evitar chamadas desnecessárias
-  useEffect(() => {
-    // Pular a primeira renderização para evitar chamadas duplicadas
-    if (isFirstRender.current) {
-      isFirstRender.current = false;
-      fetchSneakers();
-      return;
-    }
+  const handleSortChange = useCallback(
+    (sortValue) => {
+      const params = new URLSearchParams(searchParams);
 
-    // Usar um debounce para chamadas subsequentes
-    const handler = setTimeout(() => {
-      fetchSneakers();
-    }, 100);
+      if (sortValue && sortValue !== 'relevance') {
+        params.set('sortBy', sortValue);
+      } else {
+        params.delete('sortBy');
+      }
 
-    return () => clearTimeout(handler);
-  }, [currentPage, search, fetchSneakers]);
+      setSearchParams(params);
+      setCurrentPage(1);
+    },
+    [searchParams, setSearchParams]
+  );
 
-  // Sincronizar com mudanças nos parâmetros de URL
-  useEffect(() => {
-    const sortByParam = searchParams.get('sortBy');
-    if (sortByParam !== sortBy) {
-      setSortBy(sortByParam || 'relevance');
-      setActiveFilters((prev) => ({
-        ...prev,
-        sortBy: sortByParam || 'relevance',
-      }));
-    }
-  }, [searchParams, sortBy]);
-
-  const handleFilterChange = (filters) => {
-    // Preservar a ordenação atual quando filtros são aplicados
-    const filtersWithCurrentSort = {
-      ...filters,
-      sortBy: sortBy,
-    };
-
-    setActiveFilters(filtersWithCurrentSort);
-    setCurrentPage(1); // Resetar para a primeira página ao aplicar filtros
-    setIsFilterOpen(false);
-  };
-
-  const handleSortChange = (sortValue) => {
-    // Atualizar ordenação no estado
-    setSortBy(sortValue);
-
-    // Atualizar a ordenação nos filtros ativos
-    const newFilters = { ...activeFilters, sortBy: sortValue };
-    setActiveFilters(newFilters);
-
-    // Atualizar na URL
-    const params = new URLSearchParams(searchParams);
-    if (sortValue && sortValue !== 'relevance') {
-      params.set('sortBy', sortValue);
-    } else {
-      params.delete('sortBy');
-    }
-    setSearchParams(params);
-
-    // Buscar com nova ordenação
-    setCurrentPage(1);
-  };
-
-  const getCurrentSortLabel = () => {
+  const currentSortLabel = useMemo(() => {
     return (
       sortOptions.find((option) => option.value === sortBy)?.label ||
       'Relevância'
     );
-  };
+  }, [sortBy, sortOptions]);
+
+  const paginationPages = useMemo(() => {
+    const totalPages = Math.ceil(totalSneakers / sneakersPerPage);
+    const pages = [];
+    const maxVisiblePages = 5;
+
+    if (totalPages <= maxVisiblePages) {
+      for (let i = 1; i <= totalPages; i++) {
+        pages.push(i);
+      }
+    } else {
+      pages.push(1);
+
+      if (currentPage > 3) {
+        pages.push('ellipsis-1');
+      }
+
+      const startPage = Math.max(2, currentPage - 1);
+      const endPage = Math.min(totalPages - 1, currentPage + 1);
+
+      for (let i = startPage; i <= endPage; i++) {
+        pages.push(i);
+      }
+
+      if (currentPage < totalPages - 2) {
+        pages.push('ellipsis-2');
+      }
+
+      if (totalPages > 1) {
+        pages.push(totalPages);
+      }
+    }
+
+    return { pages, totalPages };
+  }, [totalSneakers, sneakersPerPage, currentPage]);
+
+  const handlePageChange = useCallback((page) => {
+    setCurrentPage(page);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }, []);
+
+  const SortDropdown = ({ isMobile = false }) => (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button variant="outline" className="text-sm flex items-center gap-1">
+          <span>{isMobile ? 'Ordenar por' : currentSortLabel}</span>
+          <ChevronDown className="h-4 w-4" />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="w-48">
+        {sortOptions.map((option) => (
+          <DropdownMenuItem
+            key={option.value}
+            className={sortBy === option.value ? 'bg-primary/10' : ''}
+            onClick={() => handleSortChange(option.value)}
+          >
+            {option.label}
+          </DropdownMenuItem>
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
 
   return (
     <div className="mx-auto px-4 py-8 relative">
       <div className="flex flex-col lg:flex-row gap-6">
+        {/* Sidebar Desktop */}
         <aside className="lg:w-1/5 h-full hidden lg:block">
           <div className="h-full sticky top-4">
             <Filter onFilterChange={handleFilterChange} isMobile={false} />
           </div>
         </aside>
 
+        {/* Mobile Controls */}
         <div className="lg:hidden w-full">
           <div className="flex justify-between items-center mb-4">
             <Filter
@@ -203,209 +230,105 @@ const Sneakers = ({ search }) => {
               isOpen={isFilterOpen}
               setIsOpen={setIsFilterOpen}
             />
-
-            {/* Ordenação mobile */}
-            <div className="flex items-center gap-2">
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button
-                    variant="outline"
-                    className="text-sm flex items-center gap-1"
-                  >
-                    <span>Ordenar por</span>
-                    <ChevronDown className="h-4 w-4" />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-48">
-                  {sortOptions.map((option) => (
-                    <DropdownMenuItem
-                      key={option.value}
-                      className={sortBy === option.value ? 'bg-primary/10' : ''}
-                      onClick={() => handleSortChange(option.value)}
-                    >
-                      {option.label}
-                    </DropdownMenuItem>
-                  ))}
-                </DropdownMenuContent>
-              </DropdownMenu>
-            </div>
+            <SortDropdown isMobile={true} />
           </div>
         </div>
 
+        {/* Main Content */}
         <main className="lg:w-4/5 lg:pr-2 w-full">
-          <div className="mb-6 hidden lg:flex items-center justify-between">
-            <h2 className="font-bold"></h2>
+          {/* Desktop Sort */}
 
-            {/* Ordenação desktop */}
+          <BannerShipping />
+
+          <div className="mb-6 hidden lg:flex items-center justify-end">
             <div className="flex items-center gap-2">
               <span className="text-sm text-gray-500">Ordenar por:</span>
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button
-                    variant="outline"
-                    className="text-sm flex items-center gap-1"
-                  >
-                    <span>{getCurrentSortLabel()}</span>
-                    <ChevronDown className="h-4 w-4" />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-48">
-                  {sortOptions.map((option) => (
-                    <DropdownMenuItem
-                      key={option.value}
-                      className={sortBy === option.value ? 'bg-primary/10' : ''}
-                      onClick={() => handleSortChange(option.value)}
-                    >
-                      {option.label}
-                    </DropdownMenuItem>
-                  ))}
-                </DropdownMenuContent>
-              </DropdownMenu>
+              <SortDropdown />
             </div>
           </div>
 
-          <SneakersList sneakers={sneakersList}/>
+          {/* Loading State */}
+          {loading ? (
+            <div className="flex justify-center items-center h-64">
+              <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-primary"></div>
+            </div>
+          ) : (
+            <>
+              <SneakersList sneakers={sneakersList} />
 
-          {totalSneakers > 0 && (
-            <div className="mt-8 flex justify-center">
-              <Pagination>
-                <PaginationContent>
-                  <PaginationItem>
-                    <PaginationPrevious
-                      onClick={() => {
-                        if (currentPage > 1) {
-                          setCurrentPage(currentPage - 1);
-                          window.scrollTo({ top: 0, behavior: 'smooth' });
-                        }
-                      }}
-                      className={
-                        currentPage <= 1 ? 'pointer-events-none opacity-50' : ''
-                      }
-                      href="#"
-                    />
-                  </PaginationItem>
+              {/* Pagination */}
+              {totalSneakers > 0 && (
+                <div className="mt-8 flex justify-center">
+                  <Pagination>
+                    <PaginationContent>
+                      <PaginationItem>
+                        <PaginationPrevious
+                          onClick={() => {
+                            if (currentPage > 1) {
+                              handlePageChange(currentPage - 1);
+                            }
+                          }}
+                          className={
+                            currentPage <= 1
+                              ? 'pointer-events-none opacity-50'
+                              : ''
+                          }
+                          href="#"
+                        />
+                      </PaginationItem>
 
-                  {(() => {
-                    const totalPages = Math.ceil(
-                      totalSneakers / sneakersPerPage
-                    );
-                    const pages = [];
-                    const maxVisiblePages = 5;
-
-                    if (totalPages <= maxVisiblePages) {
-                      for (let i = 1; i <= totalPages; i++) {
-                        pages.push(
-                          <PaginationItem key={i}>
+                      {paginationPages.pages.map((page, index) => (
+                        <PaginationItem
+                          key={typeof page === 'string' ? page : `page-${page}`}
+                        >
+                          {typeof page === 'string' ? (
+                            <PaginationEllipsis />
+                          ) : (
                             <PaginationLink
                               href="#"
-                              isActive={currentPage === i}
+                              isActive={currentPage === page}
                               onClick={(e) => {
                                 e.preventDefault();
-                                setCurrentPage(i);
-                                window.scrollTo({ top: 0, behavior: 'smooth' });
+                                handlePageChange(page);
                               }}
                             >
-                              {i}
+                              {page}
                             </PaginationLink>
-                          </PaginationItem>
-                        );
-                      }
-                    } else {
-                      pages.push(
-                        <PaginationItem key={1}>
-                          <PaginationLink
-                            href="#"
-                            isActive={currentPage === 1}
-                            onClick={(e) => {
-                              e.preventDefault();
-                              setCurrentPage(1);
-                              window.scrollTo({ top: 0, behavior: 'smooth' });
-                            }}
-                          >
-                            1
-                          </PaginationLink>
+                          )}
                         </PaginationItem>
-                      );
+                      ))}
 
-                      if (currentPage > 3) {
-                        pages.push(
-                          <PaginationItem key="ellipsis-1">
-                            <PaginationEllipsis />
-                          </PaginationItem>
-                        );
-                      }
+                      <PaginationItem>
+                        <PaginationNext
+                          onClick={() => {
+                            if (currentPage < paginationPages.totalPages) {
+                              handlePageChange(currentPage + 1);
+                            }
+                          }}
+                          className={
+                            currentPage >= paginationPages.totalPages
+                              ? 'pointer-events-none opacity-50'
+                              : ''
+                          }
+                          href="#"
+                        />
+                      </PaginationItem>
+                    </PaginationContent>
+                  </Pagination>
+                </div>
+              )}
+            </>
+          )}
 
-                      const startPage = Math.max(2, currentPage - 1);
-                      const endPage = Math.min(totalPages - 1, currentPage + 1);
-
-                      for (let i = startPage; i <= endPage; i++) {
-                        pages.push(
-                          <PaginationItem key={i}>
-                            <PaginationLink
-                              href="#"
-                              isActive={currentPage === i}
-                              onClick={(e) => {
-                                e.preventDefault();
-                                setCurrentPage(i);
-                                window.scrollTo({ top: 0, behavior: 'smooth' });
-                              }}
-                            >
-                              {i}
-                            </PaginationLink>
-                          </PaginationItem>
-                        );
-                      }
-
-                      if (currentPage < totalPages - 2) {
-                        pages.push(
-                          <PaginationItem key="ellipsis-2">
-                            <PaginationEllipsis />
-                          </PaginationItem>
-                        );
-                      }
-
-                      pages.push(
-                        <PaginationItem key={totalPages}>
-                          <PaginationLink
-                            href="#"
-                            isActive={currentPage === totalPages}
-                            onClick={(e) => {
-                              e.preventDefault();
-                              setCurrentPage(totalPages);
-                              window.scrollTo({ top: 0, behavior: 'smooth' });
-                            }}
-                          >
-                            {totalPages}
-                          </PaginationLink>
-                        </PaginationItem>
-                      );
-                    }
-
-                    return pages;
-                  })()}
-
-                  <PaginationItem>
-                    <PaginationNext
-                      onClick={() => {
-                        const totalPages = Math.ceil(
-                          totalSneakers / sneakersPerPage
-                        );
-                        if (currentPage < totalPages) {
-                          setCurrentPage(currentPage + 1);
-                          window.scrollTo({ top: 0, behavior: 'smooth' });
-                        }
-                      }}
-                      className={
-                        currentPage >=
-                        Math.ceil(totalSneakers / sneakersPerPage)
-                          ? 'pointer-events-none opacity-50'
-                          : ''
-                      }
-                      href="#"
-                    />
-                  </PaginationItem>
-                </PaginationContent>
-              </Pagination>
+          {/* Empty State */}
+          {!loading && sneakersList.length === 0 && (
+            <div className="text-center py-16">
+              <h3 className="text-lg font-medium text-gray-900 mb-2">
+                Nenhum produto encontrado
+              </h3>
+              <p className="text-gray-500">
+                Tente ajustar os filtros ou termos de busca
+              </p>
             </div>
           )}
         </main>
