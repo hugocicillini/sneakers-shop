@@ -2,19 +2,26 @@ import swaggerJsDoc from 'swagger-jsdoc';
 import swaggerUi from 'swagger-ui-express';
 
 const swaggerOptions = {
-  swaggerDefinition: {
+  definition: {
     openapi: '3.0.0',
     info: {
       title: 'Sneakers Shop API',
       version: '1.0.0',
-      description: 'API para gerenciar a loja de tênis',
+      description: 'API RESTful para e-commerce de tênis',
     },
+    servers: [
+      {
+        url: 'http://localhost:5000/api/v1',
+        description: 'Servidor de Desenvolvimento',
+      },
+    ],
     components: {
       securitySchemes: {
         bearerAuth: {
           type: 'http',
           scheme: 'bearer',
           bearerFormat: 'JWT',
+          description: 'Token JWT para autenticação. Formato: Bearer {token}',
         },
       },
     },
@@ -24,4 +31,4 @@ const swaggerOptions = {
 
 const swaggerDocs = swaggerJsDoc(swaggerOptions);
 
-export { swaggerUi, swaggerDocs };
+export { swaggerDocs, swaggerUi };
