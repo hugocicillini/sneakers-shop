@@ -26,11 +26,15 @@ const Sneakers = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const [sneakersList, setSneakersList] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [currentPage, setCurrentPage] = useState(1);
   const [totalSneakers, setTotalSneakers] = useState(0);
   const [isFilterOpen, setIsFilterOpen] = useState(false);
 
   const sneakersPerPage = 10;
+
+  const currentPage = useMemo(() => {
+    const pageFromUrl = parseInt(searchParams.get('page')) || 1;
+    return Math.max(1, pageFromUrl);
+  }, [searchParams]);
 
   const sortBy = useMemo(() => {
     return searchParams.get('sortBy') || 'relevance';
@@ -119,8 +123,9 @@ const Sneakers = () => {
         params.set('sortBy', filtersWithCurrentSort.sortBy);
       }
 
+      params.delete('page');
+
       setSearchParams(params);
-      setCurrentPage(1);
       setIsFilterOpen(false);
     },
     [sortBy, setSearchParams]
@@ -136,8 +141,9 @@ const Sneakers = () => {
         params.delete('sortBy');
       }
 
+      params.delete('page');
+
       setSearchParams(params);
-      setCurrentPage(1);
     },
     [searchParams, setSearchParams]
   );
@@ -184,10 +190,21 @@ const Sneakers = () => {
     return { pages, totalPages };
   }, [totalSneakers, sneakersPerPage, currentPage]);
 
-  const handlePageChange = useCallback((page) => {
-    setCurrentPage(page);
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-  }, []);
+  const handlePageChange = useCallback(
+    (page) => {
+      const params = new URLSearchParams(searchParams);
+
+      if (page > 1) {
+        params.set('page', page.toString());
+      } else {
+        params.delete('page');
+      }
+
+      setSearchParams(params);
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    },
+    [searchParams, setSearchParams]
+  );
 
   const SortDropdown = ({ isMobile = false }) => (
     <DropdownMenu>

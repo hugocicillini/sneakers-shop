@@ -45,13 +45,9 @@ const SneakersList = ({ sneakers }) => {
         sneakers.map((item) => (
           <Link
             key={item._id}
-            onClick={(e) => {
-              e.preventDefault();
-              const url = `/sneaker/${
-                item.slug
-              }?color=${item.defaultColor.toLowerCase()}`;
-              navigate(url);
-            }}
+            to={`/sneaker/${
+              item.slug
+            }?color=${item.defaultColor.toLowerCase()}`}
             className="no-underline text-inherit"
           >
             <Card className="flex flex-col h-full overflow-hidden transition-all duration-300 hover:shadow-lg group relative">
