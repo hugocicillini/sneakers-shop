@@ -7,6 +7,15 @@ import rateLimiter from './utils/rate-limiter.js';
 
 const app = express();
 
+// Trust Proxy Configuration
+if (process.env.NODE_ENV === 'production') {
+  app.set('trust proxy', 1);
+  console.log('🔧 Trust proxy enabled for production');
+} else {
+  app.set('trust proxy', 'loopback');
+  console.log('🔧 Trust proxy enabled for localhost only');
+}
+
 // Configuração de CORS
 const corsOptions = {
   origin: process.env.CORS_ORIGIN ? process.env.CORS_ORIGIN.split(',') : '*',
